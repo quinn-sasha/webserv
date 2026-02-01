@@ -6,8 +6,10 @@
 #include <unistd.h>
 
 #include <cstring>
-#include <iostream>
+#include <stdexcept>
 #include <string>
+
+#include "SystemError.hpp"
 
 ListenSocket::ListenSocket(const std::string& service, int backlog) : fd_(-1) {
   struct addrinfo hints;
@@ -18,8 +20,8 @@ ListenSocket::ListenSocket(const std::string& service, int backlog) : fd_(-1) {
   struct addrinfo* result_info;
   int status = getaddrinfo(NULL, service.c_str(), &hints, &result_info);
   if (status != 0) {
-    std::cerr << "getaddrinfo(): " << gai_strerror(status) << "\n";
-    return;
+    std::string msg = "getaddrinfo(): " + std::string(gai_strerror(status));
+    throw std::runtime_error(msg);
   }
   struct addrinfo* node;
   int sfd;
@@ -34,8 +36,7 @@ ListenSocket::ListenSocket(const std::string& service, int backlog) : fd_(-1) {
         -1) {
       close(sfd);
       freeaddrinfo(result_info);
-      std::cerr << "setsockopt(): " << strerror(errno) << "\n";
-      return;
+      throw SystemError("setsockopt()");
     }
     if (bind(sfd, node->ai_addr, node->ai_addrlen) == 0) {
       succeeds = true;
@@ -45,22 +46,20 @@ ListenSocket::ListenSocket(const std::string& service, int backlog) : fd_(-1) {
   }
   freeaddrinfo(result_info);
   if (!succeeds) {
-    std::cerr << "Coludn't set socket to any address\n";
-    return;
+    throw std::runtime_error("Coludn't bind socket to any address\n");
   }
   if (listen(sfd, backlog) == -1) {
     close(sfd);
-    std::cerr << "listen(): " << strerror(errno) << "\n";
-    return;
+    throw SystemError("listen()");
   }
   fd_ = sfd;
 }
 
 ListenSocket::~ListenSocket() {
   if (fd_ == -1) {
-    std::cerr << "~ListenSocket(): tried to destroy uninitialized socket\n";
+    throw std::logic_error("Tried to destroy uninitialized socket");
   }
   if (close(fd_) == -1) {
-    std::cerr << "~ListenSocket close(): " << strerror(errno) << "\n";
+    throw SystemError("~ListenSocket close()");
   }
 }
