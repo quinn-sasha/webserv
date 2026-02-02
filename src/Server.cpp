@@ -1,5 +1,7 @@
 #include "Server.hpp"
 
+#include <signal.h>
+
 #include <exception>
 #include <iostream>
 #include <string>
@@ -30,6 +32,9 @@ void Server::handle_echo_request(int client_fd) const {
 }
 
 void Server::run() const {
+  if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
+    throw SystemError("signal()");
+  }
   while (true) {
     try {
       int client_fd = accept(listen_socket_.fd(), NULL, NULL);
