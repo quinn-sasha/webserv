@@ -11,7 +11,8 @@
 
 #include "SystemError.hpp"
 
-ListenSocket::ListenSocket(const std::string& service, int backlog) : fd_(-1) {
+ListenSocket::ListenSocket(const std::string& service, int maxpending)
+    : fd_(-1) {
   struct addrinfo hints;
   memset(&hints, 0, sizeof(struct addrinfo));
   hints.ai_family = AF_UNSPEC;
@@ -48,7 +49,7 @@ ListenSocket::ListenSocket(const std::string& service, int backlog) : fd_(-1) {
   if (!succeeds) {
     throw std::runtime_error("Coludn't bind socket to any address\n");
   }
-  if (listen(sfd, backlog) == -1) {
+  if (listen(sfd, maxpending) == -1) {
     close(sfd);
     throw SystemError("listen()");
   }

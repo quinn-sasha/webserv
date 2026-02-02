@@ -8,6 +8,7 @@ SRC_DIR  := src
 OBJ_DIR  := objs
 
 SRCS     := $(SRC_DIR)/main.cpp \
+						$(SRC_DIR)/Server.cpp \
 						$(SRC_DIR)/ListenSocket.cpp
 
 OBJS     := $(SRCS:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)

@@ -13,7 +13,7 @@ class ListenSocket {
   ListenSocket& operator=(const ListenSocket&);
 
  public:
-  ListenSocket(const std::string& service, int backlog);
+  ListenSocket(const std::string& service, int maxpending);
   ~ListenSocket();
   int fd() const { return fd_; };
 };
