@@ -11,7 +11,8 @@
 
 #include "SystemError.hpp"
 
-ListenSocket::ListenSocket(const std::string& service, int maxpending)
+ListenSocket::ListenSocket(const std::string& addr, const std::string& port,
+                           int maxpending)
     : fd_(-1) {
   struct addrinfo hints;
   memset(&hints, 0, sizeof(struct addrinfo));
@@ -19,7 +20,7 @@ ListenSocket::ListenSocket(const std::string& service, int maxpending)
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_flags = AI_PASSIVE;
   struct addrinfo* result_info;
-  int status = getaddrinfo(NULL, service.c_str(), &hints, &result_info);
+  int status = getaddrinfo(addr.c_str(), port.c_str(), &hints, &result_info);
   if (status != 0) {
     std::string msg = "getaddrinfo(): " + std::string(gai_strerror(status));
     throw std::runtime_error(msg);

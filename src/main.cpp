@@ -8,7 +8,7 @@
 int main() {
   try {
     while (true) {
-      Server server("8888", 100);  // Temporal setting
+      Server server("localhost", "8888", 100);  // Temporal setting
       server.run();
     }
   } catch (const std::exception& e) {

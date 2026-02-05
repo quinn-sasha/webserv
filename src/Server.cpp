@@ -9,8 +9,8 @@
 #include "ListenSocket.hpp"
 #include "SystemError.hpp"
 
-Server::Server(const std::string& service, int maxpending)
-    : listen_socket_(service, maxpending) {}
+Server::Server(const std::string& addr, const std::string& port, int maxpending)
+    : listen_socket_(addr, port, maxpending) {}
 
 // Have responsible for freeing client_fd
 void Server::handle_echo_request(int client_fd) const {

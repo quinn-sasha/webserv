@@ -11,7 +11,7 @@ class Server {
   static const std::size_t buffer_size = 4096;
 
  public:
-  Server(const std::string& service, int maxpending);
+  Server(const std::string& addr, const std::string& port, int maxpending);
   void run() const;
   void handle_echo_request(int client_fd) const;  // Temporal member function
 };
