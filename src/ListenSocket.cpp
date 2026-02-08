@@ -1,5 +1,6 @@
 #include "ListenSocket.hpp"
 
+#include <fcntl.h>
 #include <netdb.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -15,7 +16,7 @@ ListenSocket::ListenSocket(const std::string& addr, const std::string& port,
                            int maxpending)
     : fd_(-1) {
   struct addrinfo hints;
-  memset(&hints, 0, sizeof(struct addrinfo));
+  std::memset(&hints, 0, sizeof(struct addrinfo));
   hints.ai_family = AF_UNSPEC;
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_flags = AI_PASSIVE;
@@ -32,6 +33,11 @@ ListenSocket::ListenSocket(const std::string& addr, const std::string& port,
     sfd = socket(node->ai_family, node->ai_socktype, node->ai_protocol);
     if (sfd == -1) {
       continue;
+    }
+    if (fcntl(sfd, F_SETFL, O_NONBLOCK) == -1) {
+      close(sfd);
+      freeaddrinfo(result_info);
+      throw SystemError("fcntl()");
     }
     int optval = 1;
     if (setsockopt(sfd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval)) ==
