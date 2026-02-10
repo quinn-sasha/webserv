@@ -6,7 +6,6 @@
 #include <unistd.h>
 
 #include <cerrno>
-#include <iostream>
 
 #include "MonitoredFdHandler.hpp"
 #include "Server.hpp"
@@ -19,18 +18,11 @@ AcceptHandler::AcceptHandler(int listen_fd, Server& server)
 HandlerStatus AcceptHandler::handle_input() {
   int client_fd = accept(listen_fd_, NULL, NULL);
   if (client_fd == -1) {
-    if (errno == ENFILE || errno == EMFILE) {
-      std::cerr << "Server busy (file descriptors limit reached)\n";
-      return kContinue;
-    }
-    if (errno == ECONNABORTED) {  // QUESTION: should I add EINTR here?
-      return kContinue;
-    }
-    return kFatal;
+    return kContinue;
   }
   if (fcntl(client_fd, F_SETFL, O_NONBLOCK) == -1) {
-    close(client_fd);
+    return kFatalError;
   }
   server_.register_new_client(client_fd);
-  return kContinue;
+  return kAccepted;
 }
