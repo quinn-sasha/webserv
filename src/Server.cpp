@@ -60,6 +60,9 @@ void Server::run() {
     }
     for (std::size_t i = 0; i < poll_fds_.size(); i++) {
       HandlerStatus status = handle_fd_event(i);
+      if (status == kContinue) {
+        continue;
+      }
       if (status == kFatalError) {
         throw std::runtime_error("Fatal error on monitored fd");
       }

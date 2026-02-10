@@ -9,7 +9,6 @@
 #include <iostream>
 
 #include "MonitoredFdHandler.hpp"
-#include "SystemError.hpp"
 
 ClientHandler::ClientHandler(int client_fd, Server& server)
     : client_fd_(client_fd),
@@ -19,7 +18,7 @@ ClientHandler::ClientHandler(int client_fd, Server& server)
 
 ClientHandler::~ClientHandler() {
   if (close(client_fd_) == -1) {
-    throw SystemError("~ClientHandler() close()");
+    std::cerr << "Error: ~ClientHandler(): close()\n";
   }
 }
 

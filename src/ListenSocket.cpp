@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include <cstring>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 
@@ -65,9 +66,10 @@ ListenSocket::ListenSocket(const std::string& addr, const std::string& port,
 
 ListenSocket::~ListenSocket() {
   if (fd_ == -1) {
-    throw std::logic_error("Tried to destroy uninitialized socket");
+    std::cerr << "Tried to destroy uninitialized socket\n";
+    return;
   }
   if (close(fd_) == -1) {
-    throw SystemError("~ListenSocket close()");
+    std::cerr << "Error: ~ListenSocket(): close()\n";
   }
 }
