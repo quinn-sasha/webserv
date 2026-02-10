@@ -7,9 +7,12 @@ RM       := rm -rf
 SRC_DIR  := src
 OBJ_DIR  := objs
 
-SRCS     := $(SRC_DIR)/main.cpp \
+SRCS     := $(SRC_DIR)/AcceptHandler.cpp \
+            $(SRC_DIR)/ClientHandler.cpp \
+						$(SRC_DIR)/ListenSocket.cpp \
 						$(SRC_DIR)/Server.cpp \
-						$(SRC_DIR)/ListenSocket.cpp
+            $(SRC_DIR)/main.cpp \
+            $(SRC_DIR)/pollfd_utils.cpp
 
 OBJS     := $(SRCS:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
 

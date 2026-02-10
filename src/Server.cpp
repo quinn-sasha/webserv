@@ -1,44 +1,127 @@
 #include "Server.hpp"
 
-#include <exception>
-#include <iostream>
+#include <fcntl.h>
+#include <poll.h>
+#include <signal.h>
+#include <sys/poll.h>
+
+#include <cstring>
+#include <map>
+#include <stdexcept>
 #include <string>
+#include <utility>
 
+#include "AcceptHandler.hpp"
+#include "ClientHandler.hpp"
 #include "ListenSocket.hpp"
+#include "MonitoredFdHandler.hpp"
 #include "SystemError.hpp"
+#include "pollfd_utils.hpp"
 
-Server::Server(const std::string& service, int maxpending)
-    : listen_socket_(service, maxpending) {}
+Server::Server(const std::vector<ListenConfig>& listen_configs,
+               int maxpending) {
+  for (std::size_t i = 0; i < listen_configs.size(); i++) {
+    listen_sockets_.push_back(new ListenSocket(
+        listen_configs[i].addr, listen_configs[i].port, maxpending));
+    int listen_fd = listen_sockets_[i]->fd();
+    struct pollfd tmp;
+    set_pollfd_in(tmp, listen_fd);
+    poll_fds_.push_back(tmp);
+    MonitoredFdHandler* handler = new AcceptHandler(listen_fd, *this);
+    monitored_fd_to_handler_.insert(std::make_pair(listen_fd, handler));
+  }
+}
 
-// Have responsible for freeing client_fd
-void Server::handle_echo_request(int client_fd) const {
-  char buffer[buffer_size];
+Server::~Server() {
+  for (std::size_t i = 0; i < listen_sockets_.size(); i++) {
+    delete listen_sockets_[i];
+  }
+  std::map<int, MonitoredFdHandler*>::iterator iter;
+  for (iter = monitored_fd_to_handler_.begin();
+       iter != monitored_fd_to_handler_.end(); iter++) {
+    delete iter->second;  // Close every fd except listen socket
+  }
+}
+
+// accept(), send(), recv() という異なるシステムコールに対して
+// ソケットを監視しなければいけない.
+// 監視するソケットの種類はListen socket, accepted socket.
+void Server::run() {
+  if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
+    throw SystemError("signal()");
+  }
   while (true) {
-    ssize_t num_read = recv(client_fd, buffer, buffer_size, 0);
-    if (num_read == -1) {
-      close(client_fd);
-      throw SystemError("recv()");
+    if (poll_fds_.empty()) {
+      throw std::runtime_error("Error: poll_fds_ must not be empty");
     }
-    if (num_read == 0) {
-      return;
+    // CAUTION: temporary block infinitely (temporal)
+    if (poll(&poll_fds_.front(), poll_fds_.size(), -1) == -1) {
+      throw SystemError("poll");
     }
-    if (send(client_fd, buffer, num_read, 0) != num_read) {
-      close(client_fd);
-      throw SystemError("send()");
+    for (std::size_t i = 0; i < poll_fds_.size(); i++) {
+      HandlerStatus status = handle_fd_event(i);
+      if (status == kFatalError) {
+        throw std::runtime_error("Fatal error on monitored fd");
+      }
+      if (status == kClosed) {
+        remove_client(i);
+        i--;
+      }
     }
   }
 }
 
-void Server::run() const {
-  while (true) {
-    try {
-      int client_fd = accept(listen_socket_.fd(), NULL, NULL);
-      if (client_fd == -1) {
-        throw SystemError("accept()");
-      }
-      handle_echo_request(client_fd);
-    } catch (const std::exception& e) {
-      std::cout << e.what() << "\n";
+// Returns kFatalError, kClosed or kContinue
+HandlerStatus Server::handle_fd_event(int pollfd_index) {
+  struct pollfd& poll_fd = poll_fds_[pollfd_index];
+  MonitoredFdHandler* handler = monitored_fd_to_handler_[poll_fd.fd];
+
+  if (poll_fd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+    return handler->handle_poll_error();
+  }
+  if (poll_fd.revents & POLLIN) {
+    HandlerStatus status = handler->handle_input();
+    if (status == kFatalError) {
+      return kFatalError;
+    }
+    if (status == kClosed) {
+      return kClosed;
+    }
+    if (status == kAccepted || status == kContinue) {
+      return kContinue;
+    }
+    if (status == kReceived) {
+      set_pollfd_out(poll_fd, poll_fd.fd);
     }
   }
+  if (poll_fd.revents & POLLOUT) {
+    HandlerStatus status = handler->handle_output();
+    if (status == kFatalError) {
+      return kFatalError;
+    }
+    if (status == kClosed) {
+      return kClosed;
+    }
+    if (status == kAllSent) {
+      set_pollfd_in(poll_fd, poll_fd.fd);
+    }
+  }
+  return kContinue;
+}
+
+void Server::remove_client(int pollfd_index) {
+  int fd = poll_fds_[pollfd_index].fd;
+  delete monitored_fd_to_handler_[fd];  // close(fd)
+  monitored_fd_to_handler_.erase(fd);
+
+  poll_fds_[pollfd_index] = poll_fds_.back();
+  poll_fds_.pop_back();
+}
+
+void Server::register_new_client(int client_fd) {
+  struct pollfd tmp;
+  set_pollfd_in(tmp, client_fd);
+  poll_fds_.push_back(tmp);
+  MonitoredFdHandler* handler = new ClientHandler(client_fd, *this);
+  monitored_fd_to_handler_.insert(std::make_pair(client_fd, handler));
 }
