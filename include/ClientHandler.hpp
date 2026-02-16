@@ -2,23 +2,33 @@
 #define INCLUDE_CLIENTHANDLER_HPP_
 
 #include <sys/socket.h>
-
 #include <cstddef>
+#include <string>
 
 #include "MonitoredFdHandler.hpp"
+#include "HttpRequest.hpp"  
 
 class Server;
 
 class ClientHandler : public MonitoredFdHandler {
   int client_fd_;
   Server& server_;
-  ssize_t bytes_to_send_;
-  ssize_t bytes_sent_;
+  
+  // 受信バッファ
   static const std::size_t buf_size = SO_RCVBUF;
-  char buffer_[buf_size];
+  char recv_buffer_[buf_size];
+  
+  // HTTPリクエスト
+  HttpRequest request_;  
+  
+  // 送信バッファ
+  std::string send_buffer_;  
+  ssize_t bytes_sent_;
 
   ClientHandler(const ClientHandler& other);
   ClientHandler operator=(const ClientHandler& other);
+  
+  void generate_response();  
 
  public:
   ClientHandler(int client_fd, Server& server);

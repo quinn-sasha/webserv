@@ -4,6 +4,7 @@
 #include <cstring>
 #include <exception>
 #include <string>
+#include <cerrno>
 
 class SystemError : public std::exception {
   std::string message_;
