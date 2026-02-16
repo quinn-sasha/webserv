@@ -10,6 +10,7 @@ OBJ_DIR  := objs
 SRCS_NO_MAIN := $(SRC_DIR)/AcceptHandler.cpp \
                 $(SRC_DIR)/ClientHandler.cpp \
                 $(SRC_DIR)/ListenSocket.cpp \
+                $(SRC_DIR)/Parser.cpp \
                 $(SRC_DIR)/Server.cpp \
                 $(SRC_DIR)/pollfd_utils.cpp
 

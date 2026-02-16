@@ -30,6 +30,7 @@ HandlerStatus ClientHandler::handle_input() {
   if (num_read == 0) {  // Connection closed
     return kClosed;
   }
+  // Parser is here
   bytes_to_send_ = num_read;
   return kReceived;
 }
