@@ -72,69 +72,6 @@ void CgiHandler::free_envp(char** envp) {
   delete[] envp;
 }
 
-// std::string CgiHandler::read_from_pipe(int fd) {
-//   std::string output;
-//   char buffer[4096];
-//   ssize_t n;
-  
-//   while ((n = read(fd, buffer, sizeof(buffer))) > 0) {
-//     output.append(buffer, n);
-//   }
-  
-//   return output;
-// }
-
-// std::string CgiHandler::parse_cgi_output(const std::string& cgi_output) {
-//   // CGI出力を解析してHTTPレスポンスに変換
-  
-//   // ヘッダーとボディを分離
-//   std::size_t body_start = cgi_output.find("\r\n\r\n");
-//   if (body_start == std::string::npos) {
-//     body_start = cgi_output.find("\n\n");
-//     if (body_start == std::string::npos) {
-//       return "HTTP/1.1 500 Internal Server Error\r\n\r\nCGI output error";
-//     }
-//     body_start += 2;
-//   } else {
-//     body_start += 4;
-//   }
-  
-//   std::string headers = cgi_output.substr(0, body_start);
-//   std::string body = cgi_output.substr(body_start);
-  
-//   // HTTPステータスラインを追加
-//   std::ostringstream response;
-  
-//   // Statusヘッダーを確認
-//   std::size_t status_pos = headers.find("Status:");
-//   if (status_pos != std::string::npos) {
-//     // Status: 200 OK を HTTP/1.1 200 OK に変換
-//     std::size_t line_end = headers.find('\n', status_pos);
-//     std::string status_line = headers.substr(status_pos + 8, line_end - status_pos - 8);
-    
-//     // \r を削除
-//     if (!status_line.empty() && status_line[status_line.size() - 1] == '\r') {
-//       status_line = status_line.substr(0, status_line.size() - 1);
-//     }
-    
-//     response << "HTTP/1.1 " << status_line << "\r\n";
-    
-//     // Statusヘッダーを削除
-//     headers.erase(status_pos, line_end - status_pos + 1);
-//   } else {
-//     // デフォルトは 200 OK
-//     response << "HTTP/1.1 200 OK\r\n";
-//   }
-  
-//   // Content-Lengthを追加（なければ）
-//   if (headers.find("Content-Length:") == std::string::npos) {
-//     response << "Content-Length: " << body.size() << "\r\n";
-//   }
-  
-//   response << headers << body;
-//   return response.str();
-// }
-
 int CgiHandler::execute_async(const std::string& script_path, 
                                pid_t& out_pid) {
   int pipe_in[2];
