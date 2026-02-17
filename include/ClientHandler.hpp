@@ -15,7 +15,7 @@ class ClientHandler : public MonitoredFdHandler {
   Server& server_;
   
   // 受信バッファ
-  static const std::size_t buf_size = 4096; //SO_RCVBUF;
+  static const std::size_t buf_size = SO_RCVBUF;
   char recv_buffer_[buf_size];
   
   // HTTPリクエスト

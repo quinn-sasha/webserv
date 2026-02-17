@@ -95,7 +95,7 @@ HandlerStatus Server::handle_fd_event(int pollfd_index) {
       return kReceived;
     }
     
-    // ✅ CGIレスポンス（dynamic_cast不要）
+    // ✅ CGIレスポンス
     if (status == kCgiReceived) {
       // CgiResponseHandlerであることが保証されている
       CgiResponseHandler* cgi_handler = static_cast<CgiResponseHandler*>(handler);
