@@ -2,12 +2,13 @@
 #define INCLUDE_MONITOREDFDHANDLER_HPP_
 
 enum HandlerStatus {
-  kContinue,   // ClientHandler, AcceptHandler
-  kAllSent,    // ClientHandler(temporal): sent all data in buffer
-  kAccepted,   // AcceptHandler
-  kReceived,   // ClientHandler
-  kClosed,     // ClientHandler
-  kFatalError  // AcceptHandler, ClientHandler
+  kContinue,      // ClientHandler, AcceptHandler
+  kAllSent,       // ClientHandler(temporal): sent all data in buffer
+  kAccepted,      // AcceptHandler
+  kReceived,      // ClientHandler (通常のHTTP)
+  kCgiReceived,   // CgiResponseHandler (CGI専用) ✅ 追加
+  kClosed,        // ClientHandler
+  kFatalError     // AcceptHandler, ClientHandler
 };
 // If we got kFatalError, Server should be stopped
 

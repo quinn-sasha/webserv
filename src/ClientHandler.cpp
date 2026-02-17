@@ -11,15 +11,19 @@
 #include "MonitoredFdHandler.hpp"
 #include "HttpResponse.hpp"
 #include "CgiHandler.hpp"
+#include "CgiResponseHandler.hpp"
+#include "Server.hpp"
+#include "pollfd_utils.hpp"
 
 ClientHandler::ClientHandler(int client_fd, Server& server)
     : client_fd_(client_fd),
       server_(server),
-      bytes_sent_(0) {}
+      bytes_sent_(0),
+      cgi_mode_(false) {}
 
 ClientHandler::~ClientHandler() {
-  if (close(client_fd_) == -1) {
-    std::cerr << "Error: ~ClientHandler(): close()\n";
+  if (client_fd_ != -1 && close(client_fd_) == -1) {
+    std::cerr << "Error: ~ClientHandler(): close() failed\n";
   }
 }
 
@@ -50,6 +54,12 @@ HandlerStatus ClientHandler::handle_input() {
   std::cout << "Query: " << request_.query_string() << "\n";  // デバッグ用
   
   generate_response();
+  
+  // CGIモードの場合はこのハンドラを削除
+  if (cgi_mode_) {
+    return kClosed;
+  }
+  
   return kReceived;
 }
 
@@ -83,27 +93,37 @@ void ClientHandler::generate_response() {
     response.set_status(200, "OK");
     response.add_header("Content-Type", "text/html");
     response.set_body("<h1>Hello, World!</h1>");
+    send_buffer_ = response.to_string();
+    bytes_sent_ = 0;
   } else if (request_.is_cgi()) {
     CgiHandler cgi(request_);
+    std::string script_path = request_.path().substr(1);
     
-    // クエリ文字列を除いたパスを取得
-    // request_.path() は既にクエリ文字列が除去されている
-    std::string script_path = request_.path().substr(1);  // 先頭の'/'を削除
-    // 例: "/cgi-bin/test.py" → "cgi-bin/test.py"
+    std::cout << "Starting CGI (async): " << script_path << "\n";
     
-    std::cout << "Executing CGI: " << script_path << "\n";  // デバッグ用
+    pid_t cgi_pid;
+    int cgi_fd = cgi.execute_async(script_path, cgi_pid);
     
-    std::string cgi_output = cgi.execute(script_path);
+    if (cgi_fd == -1) {
+      response.set_status(500, "Internal Server Error");
+      response.set_body("<h1>500 Internal Server Error</h1>");
+      send_buffer_ = response.to_string();
+      bytes_sent_ = 0;
+      return;
+    }
     
-    send_buffer_ = cgi_output;
-    bytes_sent_ = 0;
-    return;
+    // CgiResponseHandlerを登録
+    server_.register_cgi_response(cgi_fd, client_fd_, cgi_pid);
+    
+    // client_fd_の所有権をCgiResponseHandlerに移譲
+    client_fd_ = -1;
+    cgi_mode_ = true;  // CGIモードフラグをセット
+    
   } else {
     response.set_status(404, "Not Found");
     response.add_header("Content-Type", "text/html");
     response.set_body("<h1>404 Not Found</h1>");
+    send_buffer_ = response.to_string();
+    bytes_sent_ = 0;
   }
-  
-  send_buffer_ = response.to_string();
-  bytes_sent_ = 0;
 }
