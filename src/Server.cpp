@@ -1,4 +1,5 @@
 #include "Server.hpp"
+#include "CgiInputHandler.hpp"   // ✅ 追加
 #include "CgiResponseHandler.hpp"
 
 #include <fcntl.h>
@@ -75,6 +76,11 @@ void Server::run() {
       if (status == kContinue) {
         continue;
       }
+
+      if (status == kCgiInputDone) {
+        --i;
+        continue;
+      }
       
       if (status == kFatalError) {
         throw std::runtime_error("Fatal error on monitored fd");
@@ -140,9 +146,17 @@ HandlerStatus Server::handle_fd_event(int pollfd_index) {
     if (status == kAllSent) {
       return kAllSent;
     }
-    if (status == kContinue) {
-      return kContinue;
+
+    // ✅ kCgiInputDone → pipe_in を poll から削除
+    if (status == kCgiInputDone) {
+      int fd = poll_fd.fd;
+      poll_fds_.erase(poll_fds_.begin() + pollfd_index);
+      monitored_fd_to_handler_.erase(fd);
+      delete handler;
+      return kCgiInputDone;
     }
+    
+    return kContinue;
   }
   
   return kContinue;
@@ -172,4 +186,24 @@ void Server::register_cgi_response(int cgi_fd, int client_fd, pid_t cgi_pid) {
   
   MonitoredFdHandler* handler = new CgiResponseHandler(cgi_fd, client_fd, cgi_pid);
   monitored_fd_to_handler_.insert(std::make_pair(cgi_fd, handler));
+}
+
+void Server::register_cgi_input(int pipe_in_fd, int pipe_out_fd,
+                                 pid_t cgi_pid, const std::string& body,
+                                 int client_fd) {
+  // ✅ pipe_in と pipe_out を同時に登録
+  {
+    struct pollfd tmp;
+    set_pollfd_out(tmp, pipe_in_fd);
+    poll_fds_.push_back(tmp);
+    monitored_fd_to_handler_.insert(std::make_pair(pipe_in_fd,
+        new CgiInputHandler(pipe_in_fd, cgi_pid, body)));
+  }
+  {
+    struct pollfd tmp;
+    set_pollfd_in(tmp, pipe_out_fd);
+    poll_fds_.push_back(tmp);
+    monitored_fd_to_handler_.insert(std::make_pair(pipe_out_fd,
+        new CgiResponseHandler(pipe_out_fd, client_fd, cgi_pid)));
+  }
 }

@@ -7,6 +7,7 @@ enum HandlerStatus {
   kAccepted,      // AcceptHandler
   kReceived,      // ClientHandler (通常のHTTP)
   kCgiReceived,   // CgiResponseHandler (CGI専用) ✅ 追加
+  kCgiInputDone,
   kClosed,        // ClientHandler
   kFatalError     // AcceptHandler, ClientHandler
 };

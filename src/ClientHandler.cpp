@@ -88,7 +88,7 @@ HandlerStatus ClientHandler::handle_output() {
 
 void ClientHandler::generate_response() {
   HttpResponse response;
-  
+
   if (request_.path() == "/") {
     response.set_status(200, "OK");
     response.add_header("Content-Type", "text/html");
@@ -98,27 +98,27 @@ void ClientHandler::generate_response() {
   } else if (request_.is_cgi()) {
     CgiHandler cgi(request_);
     std::string script_path = request_.path().substr(1);
-    
+
     std::cout << "Starting CGI (async): " << script_path << "\n";
-    
+
     pid_t cgi_pid;
-    int cgi_fd = cgi.execute_async(script_path, cgi_pid);
-    
-    if (cgi_fd == -1) {
+    int pipe_out_fd;
+    int pipe_in_fd = cgi.execute_async(script_path, cgi_pid, pipe_out_fd);
+
+    if (pipe_in_fd == -1) {
       response.set_status(500, "Internal Server Error");
+      response.add_header("Content-Type", "text/html");
       response.set_body("<h1>500 Internal Server Error</h1>");
       send_buffer_ = response.to_string();
       bytes_sent_ = 0;
       return;
     }
-    
-    // CgiResponseHandlerを登録
-    server_.register_cgi_response(cgi_fd, client_fd_, cgi_pid);
-    
-    // client_fd_の所有権をCgiResponseHandlerに移譲
+
+    server_.register_cgi_input(pipe_in_fd, pipe_out_fd, cgi_pid,
+                                request_.body(), client_fd_);
+
     client_fd_ = -1;
-    cgi_mode_ = true;  // CGIモードフラグをセット
-    
+    cgi_mode_ = true;
   } else {
     response.set_status(404, "Not Found");
     response.add_header("Content-Type", "text/html");

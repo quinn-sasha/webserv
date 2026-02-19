@@ -114,51 +114,47 @@ static std::vector<std::string> get_interpreter(const std::string& script_path) 
 }
 
 int CgiHandler::execute_async(const std::string& script_path, 
-                               pid_t& out_pid) {
+                               pid_t& out_pid,
+                               int& out_pipe_out_fd) {  // ✅ 引数追加
   int pipe_in[2];
   int pipe_out[2];
-  
+
   if (pipe(pipe_in) == -1 || pipe(pipe_out) == -1) {
     std::cerr << "Error: pipe() failed: " << strerror(errno) << "\n";
     return -1;
   }
-  
+
   pid_t pid = fork();
-  
+
   if (pid == -1) {
     std::cerr << "Error: fork() failed: " << strerror(errno) << "\n";
-    close(pipe_in[0]);
-    close(pipe_in[1]);
-    close(pipe_out[0]);
-    close(pipe_out[1]);
+    close(pipe_in[0]);  close(pipe_in[1]);
+    close(pipe_out[0]); close(pipe_out[1]);
     return -1;
   }
-  
+
   if (pid == 0) {
-    // 子プロセス
     close(pipe_in[1]);
     if (dup2(pipe_in[0], STDIN_FILENO) == -1) {
       std::cerr << "Error: dup2(stdin) failed: " << strerror(errno) << "\n";
       exit(1);
     }
     close(pipe_in[0]);
-    
+
     close(pipe_out[0]);
     if (dup2(pipe_out[1], STDOUT_FILENO) == -1) {
       std::cerr << "Error: dup2(stdout) failed: " << strerror(errno) << "\n";
       exit(1);
     }
     close(pipe_out[1]);
-    
+
     std::vector<std::string> env_vars = create_env_vars(script_path);
     char** envp = create_envp(env_vars);
 
-    // argv を構築
     std::vector<std::string> argv_strs = get_interpreter(script_path);
     std::vector<char*> argv_ptrs;
-    for (std::size_t i = 0; i < argv_strs.size(); ++i) {
+    for (std::size_t i = 0; i < argv_strs.size(); ++i)
       argv_ptrs.push_back(const_cast<char*>(argv_strs[i].c_str()));
-    }
     argv_ptrs.push_back(NULL);
 
     execve(argv_ptrs[0], &argv_ptrs[0], envp);
@@ -167,29 +163,21 @@ int CgiHandler::execute_async(const std::string& script_path,
     free_envp(envp);
     exit(1);
   }
-  
+
   // 親プロセス
   close(pipe_in[0]);
-  
-  // POSTデータを送信
-  if (!request_.body().empty()) {
-    ssize_t written = write(pipe_in[1], request_.body().data(), 
-                            request_.body().size());
-    if (written == -1) {
-      std::cerr << "Error: write() failed: " << strerror(errno) << "\n";
-    }
-  }
-  close(pipe_in[1]);
-  
-  // 出力パイプをノンブロッキングに
   close(pipe_out[1]);
-  int flags = fcntl(pipe_out[0], F_GETFL, 0);
-  if (fcntl(pipe_out[0], F_SETFL, flags | O_NONBLOCK) == -1) {
-    std::cerr << "Error: fcntl(O_NONBLOCK) failed: " << strerror(errno) << "\n";
-    close(pipe_out[0]);
-    return -1;
-  }
-  
+
+  // pipe_in をノンブロッキング（write側）
+  int flags = fcntl(pipe_in[1], F_GETFL, 0);
+  fcntl(pipe_in[1], F_SETFL, flags | O_NONBLOCK);
+
+  // pipe_out をノンブロッキング（read側）
+  flags = fcntl(pipe_out[0], F_GETFL, 0);
+  fcntl(pipe_out[0], F_SETFL, flags | O_NONBLOCK);
+
+  // ✅ write() はしない（pollに任せる）
   out_pid = pid;
-  return pipe_out[0];  // 読み込み側のfdを返す
+  out_pipe_out_fd = pipe_out[0];  // ✅ 追加
+  return pipe_in[1];
 }
