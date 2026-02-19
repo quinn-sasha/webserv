@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-# filepath: /home/skimura/git/webserv/cgi-bin/form.py
 import os
 import sys
 

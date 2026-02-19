@@ -3,16 +3,15 @@
 #include <cstdlib>
 
 HttpRequest::HttpRequest() 
-    : header_parsed_(false), content_length_(0) {}
+    : header_parsed_(false), is_chunked_(false), content_length_(0) {}
 
 HttpRequest::ParseResult HttpRequest::parse(const char* data, std::size_t len) {
   raw_request_.append(data, len);
 
-  // ヘッダー未解析
   if (!header_parsed_) {
     std::size_t header_end = raw_request_.find("\r\n\r\n");
     if (header_end == std::string::npos) {
-      return kIncomplete;  // まだヘッダー受信中
+      return kIncomplete;
     }
 
     if (!parse_request_line()) return kError;
@@ -20,24 +19,95 @@ HttpRequest::ParseResult HttpRequest::parse(const char* data, std::size_t len) {
     
     header_parsed_ = true;
 
-    // Content-Length取得
     const std::string& cl = header("Content-Length");
     if (!cl.empty()) {
-      content_length_ = std::atoi(cl.c_str());
+      content_length_ = static_cast<std::size_t>(std::atoi(cl.c_str()));
     }
+    
+    const std::string& te = header("Transfer-Encoding");
+    is_chunked_ = (te == "chunked");
   }
 
-  // ボディ受信確認
   std::size_t header_end = raw_request_.find("\r\n\r\n");
   std::size_t body_start = header_end + 4;
-  std::size_t body_len = raw_request_.size() - body_start;
 
-  if (body_len < content_length_) {
-    return kIncomplete;  // まだボディ受信中
+  // ボディがまだない場合
+  if (body_start > raw_request_.size()) {
+    return kIncomplete;
   }
 
-  body_ = raw_request_.substr(body_start, content_length_);
+  std::string raw_body = raw_request_.substr(body_start);
+
+  if (is_chunked_) {
+    return decode_chunked(raw_body);
+  }
+
+  // ボディなし（GET等）
+  if (content_length_ == 0) {
+    return kComplete;
+  }
+
+  // Content-Length固定長
+  if (raw_body.size() < content_length_) {
+    return kIncomplete;
+  }
+
+  body_ = raw_body.substr(0, content_length_);
   return kComplete;
+}
+
+HttpRequest::ParseResult HttpRequest::decode_chunked(const std::string& raw_body) {
+  std::string decoded;
+  std::size_t pos = 0;
+
+  while (pos < raw_body.size()) {
+    // チャンクサイズ行を探す
+    std::size_t crlf = raw_body.find("\r\n", pos);
+    if (crlf == std::string::npos) {
+      return kIncomplete;
+    }
+
+    std::string size_str = raw_body.substr(pos, crlf - pos);
+
+    // チャンク拡張（";"以降）を無視
+    std::size_t semicolon = size_str.find(';');
+    if (semicolon != std::string::npos) {
+      size_str = size_str.substr(0, semicolon);
+    }
+
+    // 空文字チェック
+    if (size_str.empty()) {
+      return kError;
+    }
+
+    char* end_ptr;
+    std::size_t chunk_size = std::strtoul(size_str.c_str(), &end_ptr, 16);
+    if (end_ptr == size_str.c_str()) {
+      return kError;
+    }
+
+    pos = crlf + 2;
+
+    // 最終チャンク（0\r\n\r\n）
+    if (chunk_size == 0) {
+      body_ = decoded;
+      // Content-Lengthをデコード済みサイズに更新
+      std::ostringstream oss;
+      oss << body_.size();
+      headers_["Content-Length"] = oss.str();
+      return kComplete;
+    }
+
+    // チャンクデータが届いているか確認（データ + \r\n）
+    if (pos + chunk_size + 2 > raw_body.size()) {
+      return kIncomplete;
+    }
+
+    decoded.append(raw_body, pos, chunk_size);
+    pos += chunk_size + 2;
+  }
+
+  return kIncomplete;
 }
 
 bool HttpRequest::parse_request_line() {
