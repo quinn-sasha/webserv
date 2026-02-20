@@ -35,8 +35,6 @@ struct ServerContext {
 
 class Config {
 	std::vector<ServerContext> servers_;
-	void error_exit(const std::string& msg);
-	bool is_all_digits(const std::string& str);
 	std::string read_file(const std::string& filepath);
 	std::vector<std::string> tokenize(const std::string& content);
 	void parse_server(std::vector<std::string>& tokens, size_t& i);
