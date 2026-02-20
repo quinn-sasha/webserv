@@ -27,3 +27,8 @@ bool is_all_digits(const std::string& str) {
 	}
 	return true;
 }
+
+bool is_valid_ip(const std::string& str) {
+    // TODO: IPアドレスのバリデーション　ドットで分割 .が３つあるか　各セグメントが空でないか、数字だけか　数値が0~255かどうか
+    
+}

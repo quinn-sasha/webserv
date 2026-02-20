@@ -61,7 +61,8 @@ void parse_server(std::vector<std::string>& tokens, size_t& i) {
 		if (colon_pos != std::string::npos) {
 			// TODO:IPアドレスが正しいフォーマットかどうかの確認
 			sc.host = val.substr(0, colon_pos);
-			std::string ip = val.substr(colon_pos + 1);
+			std::string port = val.substr(colon_pos + 1);
+			sc.port = std::atoi(port.c_str());
 		} else {
 			sc.port = std::atoi(tokens[i].c_str());
 			//TODO: std::strtol()を用いてオーバフローの対策とportの範囲をチェックする
@@ -98,6 +99,5 @@ void Config::load_file(const std::string& filepath) {
 
 //TODO: 設定ファイルにない項目のためにコンストラクタでデフォルト値を入れておく。
 //TODO: 文字列をトークンに分ける。
-// IPアドレスのバリデーション　ドットで分割 .が３つあるか　各セグメントが空でないか、数字だけか　数値が0~255かどうか
 // ポートの範囲でウェルノウンポート(0 ~ 1023), 登録済みポート(1024~49151), ダイナミック/プライベートポート
 // configはどのポートを使えるのか？？
