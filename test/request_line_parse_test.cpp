@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include "MonitoredFdHandler.hpp"
 #include "Parser.hpp"
 
 TEST(RequestLineParse, InvalidRequestLine) {
@@ -35,11 +36,11 @@ TEST(RequestLineParse, InvalidVersion) {
 
 TEST(RequestLineParse, PositiveTest) {
   Parser parser;
-  EXPECT_EQ(parser.parse_request_line("GET / HTTP/1.0"), kContinue);
-  EXPECT_EQ(parser.get_request_line().method, kGet);
-  EXPECT_EQ(parser.get_request_line().target, "/");
-  EXPECT_EQ(parser.get_request_line().version, kHttp10);
+  EXPECT_EQ(parser.parse_request_line("GET / HTTP/1.0"), kHandlerContinue);
+  EXPECT_EQ(parser.get_request().method, kGet);
+  EXPECT_EQ(parser.get_request().target, "/");
+  EXPECT_EQ(parser.get_request().version, kHttp10);
 
-  EXPECT_EQ(parser.parse_request_line("GET / HTTP/1.1"), kContinue);
-  EXPECT_EQ(parser.get_request_line().version, kHttp11);
+  EXPECT_EQ(parser.parse_request_line("GET / HTTP/1.1"), kHandlerContinue);
+  EXPECT_EQ(parser.get_request().version, kHttp11);
 }
