@@ -15,6 +15,7 @@ SRCS_NO_MAIN := $(SRC_DIR)/AcceptHandler.cpp \
 				$(SRC_DIR)/HttpRequest.cpp \
 				$(SRC_DIR)/HttpResponse.cpp \
                 $(SRC_DIR)/CgiHandler.cpp \
+				$(SRC_DIR)/CgiEnv.cpp \
 				$(SRC_DIR)/CgiInputHandler.cpp \
                 $(SRC_DIR)/CgiResponseHandler.cpp
 

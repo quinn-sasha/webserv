@@ -17,10 +17,6 @@ class CgiHandler {
  private:
   const HttpRequest& request_;
 
-  std::vector<std::string> create_env_vars(const std::string& script_path);
-  char** create_envp(const std::vector<std::string>& env_vars);
-  void free_envp(char** envp);
-
   CgiHandler(const CgiHandler&);
   CgiHandler& operator=(const CgiHandler&);
 };

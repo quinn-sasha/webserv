@@ -1,5 +1,5 @@
 #include "Server.hpp"
-#include "CgiInputHandler.hpp"   // ✅ 追加
+#include "CgiInputHandler.hpp"   
 #include "CgiResponseHandler.hpp"
 
 #include <fcntl.h>
@@ -147,7 +147,6 @@ HandlerStatus Server::handle_fd_event(int pollfd_index) {
       return kAllSent;
     }
 
-    // ✅ kCgiInputDone → pipe_in を poll から削除
     if (status == kCgiInputDone) {
       int fd = poll_fd.fd;
       poll_fds_.erase(poll_fds_.begin() + pollfd_index);
@@ -191,7 +190,6 @@ void Server::register_cgi_response(int cgi_fd, int client_fd, pid_t cgi_pid) {
 void Server::register_cgi_input(int pipe_in_fd, int pipe_out_fd,
                                  pid_t cgi_pid, const std::string& body,
                                  int client_fd) {
-  // ✅ pipe_in と pipe_out を同時に登録
   {
     struct pollfd tmp;
     set_pollfd_out(tmp, pipe_in_fd);

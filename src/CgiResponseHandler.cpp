@@ -16,20 +16,13 @@ CgiResponseHandler::CgiResponseHandler(int cgi_fd, int client_fd,
     : cgi_fd_(cgi_fd),
       client_fd_(client_fd),
       cgi_pid_(cgi_pid),
-      //server_(server),
       bytes_sent_(0),
       cgi_finished_(false)
-      //header_sent_(false) 
       {}
 
 CgiResponseHandler::~CgiResponseHandler() {
   if (cgi_fd_ != -1) {
     close(cgi_fd_);
-  }
-  
-  // client_fd_ もクローズ（このハンドラが所有権を持つ）
-  if (client_fd_ != -1) {
-    close(client_fd_);
   }
   
   // CGIプロセスが生きていたら終了待機
@@ -51,9 +44,6 @@ HandlerStatus CgiResponseHandler::handle_input() {
   ssize_t n = read(cgi_fd_, buffer, sizeof(buffer));
   
   if (n == -1) {
-    if (errno == EAGAIN || errno == EWOULDBLOCK) {
-      return kContinue;
-    }
     return kClosed;
   }
   
@@ -84,9 +74,6 @@ HandlerStatus CgiResponseHandler::handle_output() {
                    remaining, 0);
   
   if (n == -1) {
-    if (errno == EAGAIN || errno == EWOULDBLOCK) {
-      return kContinue;
-    }
     return kClosed;
   }
   
@@ -138,8 +125,11 @@ std::string CgiResponseHandler::parse_cgi_output(const std::string& cgi_output) 
     response << "HTTP/1.1 200 OK\r\n";
   }
   
-  // Content-Length追加
-  if (headers.find("Content-Length:") == std::string::npos) {
+  // Transfer-Encoding: chunked の場合は Content-Length を付けない
+  if (headers.find("Transfer-Encoding") != std::string::npos &&
+      headers.find("chunked") != std::string::npos) {
+  } else {
+    // 通常レスポンス → Content-Length
     response << "Content-Length: " << body.size() << "\r\n";
   }
   

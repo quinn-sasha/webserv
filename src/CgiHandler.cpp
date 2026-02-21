@@ -1,4 +1,5 @@
 #include "CgiHandler.hpp"
+#include "CgiEnv.hpp"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -17,60 +18,39 @@
 CgiHandler::CgiHandler(const HttpRequest& request) 
     : request_(request) {}
 
-std::vector<std::string> CgiHandler::create_env_vars(const std::string& script_path) {
-  std::vector<std::string> env_vars;
+static CgiEnv create_env(const HttpRequest& request,
+                          const std::string& script_path) {
+  CgiEnv env;
 
-  env_vars.push_back("REQUEST_METHOD=" + request_.method());
-  env_vars.push_back("SCRIPT_NAME=" + request_.path());
-  env_vars.push_back("PATH_INFO=" + request_.path());
-  env_vars.push_back("QUERY_STRING=" + request_.query_string());
-  env_vars.push_back("SERVER_PROTOCOL=HTTP/1.1");
-  env_vars.push_back("GATEWAY_INTERFACE=CGI/1.1");
-  env_vars.push_back("SCRIPT_FILENAME=" + script_path);
+  env.set("REQUEST_METHOD",   request.method());
+  env.set("SCRIPT_NAME",      request.path());
+  env.set("PATH_INFO",        request.path());
+  env.set("QUERY_STRING",     request.query_string());
+  env.set("SERVER_PROTOCOL",  "HTTP/1.1");
+  env.set("GATEWAY_INTERFACE","CGI/1.1");
+  env.set("SCRIPT_FILENAME",  script_path);
 
-  // Content-Type転送
-  const std::string& content_type = request_.header("Content-Type");
+  const std::string& content_type = request.header("Content-Type");
   if (!content_type.empty()) {
-    env_vars.push_back("CONTENT_TYPE=" + content_type);
+    env.set("CONTENT_TYPE", content_type);
   }
 
-  // ✅ Content-Length（デコード済みのbody_のサイズ）
-  const std::string& body = request_.body();
+  const std::string& body = request.body();
   if (!body.empty()) {
     std::ostringstream oss;
     oss << body.size();
-    env_vars.push_back("CONTENT_LENGTH=" + oss.str());
+    env.set("CONTENT_LENGTH", oss.str());
   }
 
-  return env_vars;
-}
-
-char** CgiHandler::create_envp(const std::vector<std::string>& env_vars) {
-  // char*配列を動的確保
-  char** envp = new char*[env_vars.size() + 1];
-  
-  for (std::size_t i = 0; i < env_vars.size(); ++i) {
-    envp[i] = new char[env_vars[i].size() + 1];
-    std::strcpy(envp[i], env_vars[i].c_str());
-  }
-  envp[env_vars.size()] = NULL;
-  
-  return envp;
-}
-
-void CgiHandler::free_envp(char** envp) {
-  for (std::size_t i = 0; envp[i] != NULL; ++i) {
-    delete[] envp[i];
-  }
-  delete[] envp;
+  return env;
 }
 
 static std::string get_interpreter_from_shebang(const std::string& script_path) {
-  std::ifstream f(script_path.c_str());
-  if (!f.is_open()) return "";
+  std::ifstream ifs(script_path.c_str());
+  if (!ifs.is_open()) return "";
 
   std::string first_line;
-  std::getline(f, first_line);
+  std::getline(ifs, first_line);
 
   if (first_line.size() >= 2 && first_line[0] == '#' && first_line[1] == '!') {
     std::string interp = first_line.substr(2);
@@ -109,13 +89,17 @@ static std::vector<std::string> get_interpreter(const std::string& script_path) 
     else if (ext == ".sh")  args.push_back("/bin/sh");
   }
 
-  args.push_back(script_path);
+  std::size_t slash = script_path.rfind('/');
+  std::string script_name = (slash != std::string::npos)
+                              ? script_path.substr(slash + 1)
+                              : script_path;
+  args.push_back(script_name);  
   return args;
 }
 
 int CgiHandler::execute_async(const std::string& script_path, 
                                pid_t& out_pid,
-                               int& out_pipe_out_fd) {  // ✅ 引数追加
+                               int& out_pipe_out_fd) {  
   int pipe_in[2];
   int pipe_out[2];
 
@@ -148,8 +132,18 @@ int CgiHandler::execute_async(const std::string& script_path,
     }
     close(pipe_out[1]);
 
-    std::vector<std::string> env_vars = create_env_vars(script_path);
-    char** envp = create_envp(env_vars);
+    std::string script_dir = script_path;
+    std::size_t slash = script_dir.rfind('/');
+    if (slash != std::string::npos) {
+      script_dir = script_dir.substr(0, slash);
+      if (chdir(script_dir.c_str()) == -1) {
+        std::cerr << "Error: chdir() failed: " << strerror(errno) << "\n";
+        exit(1);
+      }
+    }
+
+    CgiEnv env = create_env(request_, script_path);
+    char** envp = env.to_envp();
 
     std::vector<std::string> argv_strs = get_interpreter(script_path);
     std::vector<char*> argv_ptrs;
@@ -160,7 +154,7 @@ int CgiHandler::execute_async(const std::string& script_path,
     execve(argv_ptrs[0], &argv_ptrs[0], envp);
 
     std::cerr << "Error: execve() failed: " << strerror(errno) << "\n";
-    free_envp(envp);
+    CgiEnv::free_envp(envp);
     exit(1);
   }
 
@@ -178,6 +172,6 @@ int CgiHandler::execute_async(const std::string& script_path,
 
   // ✅ write() はしない（pollに任せる）
   out_pid = pid;
-  out_pipe_out_fd = pipe_out[0];  // ✅ 追加
+  out_pipe_out_fd = pipe_out[0];
   return pipe_in[1];
 }

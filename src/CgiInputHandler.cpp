@@ -34,8 +34,6 @@ HandlerStatus CgiInputHandler::handle_output() {
                     body_.data() + bytes_written_,
                     body_.size() - bytes_written_);
   if (n == -1) {
-    if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
-      return kContinue;
     std::cerr << "Error: write() to CGI failed: " << strerror(errno) << "\n";
     return kFatalError;
   }
