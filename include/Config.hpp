@@ -9,12 +9,15 @@ struct LocationContext {
 	std::string path;
 	std::string root; //物理パス(/tmp/www)
 	std::vector<std::string> allow_methods; //許可メソッド
-	std::string index; //デフォルトファイル(index.html)
+	std::vector<std::string> index; //デフォルトファイル(index.html)
+	bool is_exact_match; // プレフィックスが"="のとき
 	bool autoindex; //ディレクトリ一覧を表示するか
 	std::string redirect_url; //リダイレクト先
 	std::string upload_store; //ファイルアップロード先
 	std::string cgi_extension; //CGI実行対象の拡張子
 	std::string cgi_path; //CGI実行ファイルのパス
+
+	LocationContext() : is_exact_match(false), autoindex(false) {}
 };
 
 struct ListenContext {
@@ -29,9 +32,9 @@ struct ServerContext {
 	std::map<int, std::string> error_pages; //エラーコードとパスの対応
 	std::vector<LocationContext> locations; //このサーバー内のlocationリスト
 
-	ServerContext()
-        : client_max_body_size(1048576) // 1MB
-  {}
+	// ServerContext()
+  //       : client_max_body_size(1000000) // 1MB
+  // {}
 	const LocationContext& get_matching_location(const std::string& uri) const;
 };
 

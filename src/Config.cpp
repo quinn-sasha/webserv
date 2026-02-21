@@ -96,11 +96,129 @@ void parse_listen_directive(std::vector<std::string>& tokens, size_t& i, ServerC
 }
 
 void parse_server_name_directive(std::vector<std::string>& tokens, size_t&i, ServerContext& sc) {
+	if (i >= tokens.size() || tokens[i] == ";") {
+		error_exit("server_name directive must have at least one value");
+	}
 
+	while (i < tokens.size() && tokens[i] != ";") {
+		sc.server_names.push_back(tokens[i]);
+		i++;
+	}
+
+	if (i >= tokens.size() || tokens[i] != ";") {
+		error_exit("Expected ';' after server_name values");
+	}
+
+	i++;
+}
+
+void parse_client_max_body_size_directive(std::vector<std::string>tokens,
+				size_t i, ServerContext& sc) {
+	if (i >= tokens.size() || tokens[i] == ";") {
+		error_exit("client_max_body_size_directive must have at least one value");
+	}
+
+	std::string val = tokens[i];
+	char* endptr;
+	errno = 0;
+	long size = std::strtol(val.c_str(), &endptr, 10);
+
+	if (errno == ERANGE || *endptr != '\0' || size < 0) {
+		error_exit("Invalid client_max_body_size: " + val);
+	}
+
+	sc.client_max_body_size = size;
+	i++;
+
+	if (i >= tokens.size() || tokens[i] != ";") {
+		error_exit("Expected ';' after client_max_body_size values");
+	}
+	i++;
 }
 
 void parse_location_directive(std::vector<std::string>& tokens, size_t i, ServerContext& sc) {
+	// 完全一致、優先前方一致、通常前方一致
 
+	LocationContext lc;
+	lc.is_exact_match = false;
+
+	if (tokens[i] == "=") {
+		lc.is_exact_match = true;
+		i++;
+	} else if (tokens[i] == "^~") {
+		lc.is_exact_match = false;
+		i++;
+	}
+
+	if (i >= tokens.size() || tokens[i] == "{") {
+		error_exit("Location path is missing");
+	}
+	lc.path = tokens[i];
+	i++;
+
+	if (i >= tokens.size() || tokens[i] != "{") {
+		error_exit("Expected '{' after location path");
+	}
+	i++;
+
+	while (i < tokens.size() && tokens[i] != "}") {
+		if (tokens[i] == "root") {
+			i++;
+			if (i >= tokens.size() || tokens[i] == ";")
+				error_exit("root needs a value");
+			lc.root  = tokens[i];
+			i++;
+			if (i >= tokens.size() || tokens[i] != ";") {
+				error_exit("Expected ';' after root path");
+			}
+			i++;
+		} else if (tokens[i] == "index") {
+				i++;
+				if (i >= tokens.size() || tokens[i] == ";")
+					error_exit("index needs a value");
+				while (i < tokens.size() && tokens[i] != ";") {
+					lc.index.push_back(tokens[i]);
+					i++;
+				}
+				if (i >= tokens.size() || tokens[i] != ";") {
+					error_exit("Expected ';' after index values");
+				}
+				i++;
+		} else if (tokens[i] == "allow_methods") {
+				i++;
+				if (i >= tokens.size() || tokens[i] == ";")
+					error_exit("allow_methods needs a value");
+				while (i < tokens.size() && tokens[i] != ";") {
+					lc.allow_methods.push_back(tokens[i]);
+					i++;
+				}
+				if (i >= tokens.size() || tokens[i] != ";") {
+					error_exit("Expected ';' after allow_methods values");
+				}
+				i++;
+		} else if (tokens[i] == "autoindex") {
+				i++;
+				if (i >= tokens.size() || tokens[i] == ";")
+					error_exit("autoindex needs a value");
+				if (tokens[i] != "on" && tokens[i] != "off")
+          error_exit("autoindex must be 'on' or 'off'");
+				lc.autoindex = (tokens[i] == "on");
+				i++;
+				if (i >= tokens.size() || tokens[i] != ";") {
+					error_exit("Expected ';' after autoindex values");
+				}
+				i++;
+		} else {
+			error_exit("Unknown location directive: " + tokens[i]);
+		}
+	}
+
+	if (i >= tokens.size() || tokens[i] != "}") {
+		error_exit("Misssing '}' in location block");
+	}
+	i++;
+
+	sc.locations.push_back(lc);
 }
 
 //リストを順番に読んで、ServerContextに値を代入していく
@@ -119,17 +237,23 @@ void parse_server(std::vector<std::string>& tokens, size_t& i) {
 		} else if (tokens[i] == "server_name") {
 				i++;
 			parse_server_name_directive(tokens, i, sc);
-			// TODO: parse server_name
-		}	else if (tokens[i] == "location") {
+		}	else if (tokens[i] == "client_max_body_size") {
+				i++;
+			parse_client_max_body_size_directive(tokens, i, sc);
+			// TODO parse location
+		} else if (tokens[i] == "location") {
 				i++;
 			parse_location_directive(tokens, i, sc);
 			// TODO parse location
+		} else {
+			error_exit("Unknown directive: " + tokens[i]);
 		}
 	}
 	if (i >= tokens.size() || tokens[i] != "}") {
 		error_exit("Unexpected end of file: missing '}' in server block");
 	}
-	// servers.push_back(sc);
+	// TODO: ここでデフォルト値を補完する ディレクティブがないときとか
+	// servers_.push_back(sc);
 }
 
 void Config::load_file(const std::string& filepath) {
