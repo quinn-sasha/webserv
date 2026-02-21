@@ -6,16 +6,30 @@
 #include <cstddef>
 
 #include "MonitoredFdHandler.hpp"
+#include "Parser.hpp"
+#include "Response.hpp"
 
 class Server;
 
 class ClientHandler : public MonitoredFdHandler {
   int client_fd_;
   Server& server_;
-  ssize_t bytes_to_send_;
-  ssize_t bytes_sent_;
   static const std::size_t buf_size = SO_RCVBUF;
   char buffer_[buf_size];
+  Parser parser_;
+  Response response_;
+  ssize_t bytes_sent_;
+  std::string response_str_;
+
+  enum State {
+    kReceiving,
+    kExecutingCgi,
+    kSendingResponse,
+  };
+  State state_;
+
+  // Helpers
+  void set_response(ParserStatus status);
 
   ClientHandler(const ClientHandler& other);
   ClientHandler operator=(const ClientHandler& other);
@@ -25,7 +39,7 @@ class ClientHandler : public MonitoredFdHandler {
   ~ClientHandler();
   HandlerStatus handle_input();
   HandlerStatus handle_output();
-  HandlerStatus handle_poll_error() { return kClosed; }
+  HandlerStatus handle_poll_error() { return kHandlerClosed; }
 };
 
 #endif  // INCLUDE_CLIENTHANDLER_HPP_
