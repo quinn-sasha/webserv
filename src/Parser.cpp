@@ -35,7 +35,7 @@ bool uses_obsolete_line_folding(const std::string& request,
 // 405(Method not allowed)かどうかはrequest-targetとセットで判別できる
 ParserStatus Parser::parse_method_name(const std::string& method) {
   request_.method = kUnknownMethod;
-  if (method.size() > kMaxUriLength) {
+  if (method.size() > kMaxMethodLength) {
     return kNotImplemented;
   }
   if (method.find(' ') != std::string::npos) {
@@ -92,8 +92,8 @@ ParserStatus Parser::parse_http_version(const std::string& version) {
 
 // CAUTION: request_line は改行を含まない
 ParserStatus Parser::parse_request_line(const std::string& request_line) {
-  if (request_line.size() > kMaxRequestLine) {
-    return kNotImplemented;
+  if (request_line.size() > kMaxLineLength) {
+    return kContentTooLarge;
   }
   std::size_t word_start = 0;
   std::vector<std::string> tokens;
@@ -125,8 +125,10 @@ ParserStatus Parser::parse_request_line(const std::string& request_line) {
 
 // CRLF was removed from filed_line.
 // Return kParseContinue or kBadRequest.
-// TODO: check fileld line limit and number of fields
 ParserStatus Parser::parse_filed_line(const std::string& filed_line) {
+  if (filed_line.size() > kMaxLineLength) {
+    return kContentTooLarge;
+  }
   std::size_t delimiter_pos = filed_line.find(':');
   if (delimiter_pos == std::string::npos) {
     return kBadRequest;
@@ -173,6 +175,9 @@ ParserStatus Parser::determine_next_action() const {
 // and update parser state
 ParserStatus Parser::parse_request(const char* message, ssize_t num_read) {
   buffer_.append(std::string(message, num_read));
+  if (buffer_.size() > kMaxRequestSize) {
+    return kContentTooLarge;
+  }
   if (state_ == kParsingRequestLine) {
     std::size_t crlf_pos = buffer_.find("\r\n");
     if (crlf_pos == std::string::npos) {

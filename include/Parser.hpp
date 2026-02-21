@@ -10,6 +10,7 @@ enum ParserStatus {
   kUriTooLong,
   kVersionNotSupported,
   kMethodNotAllowed,
+  kContentTooLarge,
   // Custom status used in Parser class
   kParseContinue,
   kParseFinished,
@@ -43,8 +44,10 @@ struct Request {
 };
 
 class Parser {
-  static const int kMaxUriLength = 2000;
-  static const int kMaxRequestLine = 8100;
+  static const std::size_t kMaxUriLength = 2000;
+  static const std::size_t kMaxMethodLength = 10;  // temporal
+  static const std::size_t kMaxLineLength = 8100;
+  static const std::size_t kMaxRequestSize = 1ul * 1024 * 1024;
   std::string buffer_;
   ParserState state_;
   Request request_;
