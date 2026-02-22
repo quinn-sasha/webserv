@@ -178,16 +178,7 @@ void Server::register_new_client(int client_fd) {
   monitored_fd_to_handler_.insert(std::make_pair(client_fd, handler));
 }
 
-void Server::register_cgi_response(int cgi_fd, int client_fd, pid_t cgi_pid) {
-  struct pollfd tmp;
-  set_pollfd_in(tmp, cgi_fd);
-  poll_fds_.push_back(tmp);
-  
-  MonitoredFdHandler* handler = new CgiResponseHandler(cgi_fd, client_fd, cgi_pid);
-  monitored_fd_to_handler_.insert(std::make_pair(cgi_fd, handler));
-}
-
-void Server::register_cgi_input(int pipe_in_fd, int pipe_out_fd,
+void Server::register_cgi_fd(int pipe_in_fd, int pipe_out_fd,
                                  pid_t cgi_pid, const std::string& body,
                                  int client_fd) {
   {

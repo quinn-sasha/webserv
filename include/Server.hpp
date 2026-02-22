@@ -19,10 +19,9 @@ class Server {
   void run();
   HandlerStatus handle_fd_event(int pollfd_index);
   void register_new_client(int client_fd);
-  void register_cgi_input(int pipe_in_fd, int pipe_out_fd,
+  void register_cgi_fd(int pipe_in_fd, int pipe_out_fd,
                            pid_t cgi_pid, const std::string& body,
                            int client_fd);
-  void register_cgi_response(int cgi_fd, int client_fd, pid_t cgi_pid);
   void remove_client(int pollfd_index);
 };
 

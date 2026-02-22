@@ -2,27 +2,27 @@
 import os
 import sys
 
-print("Content-Type: text/html\r")
-print("\r")
-print("<html>")
-print("<head><title>CGI Test</title></head>")
-print("<body>")
-print("<h1>CGI is working!</h1>")
-print("<h2>Environment Variables:</h2>")
-print("<ul>")
-print(f"<li>REQUEST_METHOD: {os.environ.get('REQUEST_METHOD', 'N/A')}</li>")
-print(f"<li>SCRIPT_NAME: {os.environ.get('SCRIPT_NAME', 'N/A')}</li>")
-print(f"<li>QUERY_STRING: {os.environ.get('QUERY_STRING', 'N/A')}</li>")
-print(f"<li>CONTENT_LENGTH: {os.environ.get('CONTENT_LENGTH', 'N/A')}</li>")
-print("</ul>")
+sys.stdout.write("Content-Type: text/html\r\n")
+sys.stdout.write("\r\n")
 
-# POSTデータ表示
-if os.environ.get('REQUEST_METHOD') == 'POST':
-    content_length = int(os.environ.get('CONTENT_LENGTH', 0))
+sys.stdout.write("<html>\n")
+sys.stdout.write("<head><title>CGI Test</title></head>\n")
+sys.stdout.write("<body>\n")
+sys.stdout.write("<h1>CGI is working!</h1>\n")
+sys.stdout.write("<h2>Environment Variables:</h2>\n")
+sys.stdout.write("<ul>\n")
+sys.stdout.write(f"<li>REQUEST_METHOD: {os.environ.get('REQUEST_METHOD', 'N/A')}</li>\n")
+sys.stdout.write(f"<li>SCRIPT_NAME: {os.environ.get('SCRIPT_NAME', 'N/A')}</li>\n")
+sys.stdout.write(f"<li>QUERY_STRING: {os.environ.get('QUERY_STRING', 'N/A')}</li>\n")
+sys.stdout.write(f"<li>CONTENT_LENGTH: {os.environ.get('CONTENT_LENGTH', 'N/A')}</li>\n")
+sys.stdout.write("</ul>\n")
+
+if os.environ.get("REQUEST_METHOD") == "POST":
+    content_length = int(os.environ.get("CONTENT_LENGTH", 0))
     if content_length > 0:
         post_data = sys.stdin.read(content_length)
-        print(f"<h2>POST Data:</h2>")
-        print(f"<pre>{post_data}</pre>")
+        sys.stdout.write("<h2>POST Data:</h2>\n")
+        sys.stdout.write(f"<pre>{post_data}</pre>\n")
 
-print("</body>")
-print("</html>")
+sys.stdout.write("</body>\n</html>\n")
+sys.stdout.flush()

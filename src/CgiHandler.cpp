@@ -1,5 +1,5 @@
 #include "CgiHandler.hpp"
-#include "CgiEnv.hpp"
+#include "MetaVariables.hpp"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -17,33 +17,6 @@
 
 CgiHandler::CgiHandler(const HttpRequest& request) 
     : request_(request) {}
-
-static CgiEnv create_env(const HttpRequest& request,
-                          const std::string& script_path) {
-  CgiEnv env;
-
-  env.set("REQUEST_METHOD",   request.method());
-  env.set("SCRIPT_NAME",      request.path());
-  env.set("PATH_INFO",        request.path());
-  env.set("QUERY_STRING",     request.query_string());
-  env.set("SERVER_PROTOCOL",  "HTTP/1.1");
-  env.set("GATEWAY_INTERFACE","CGI/1.1");
-  env.set("SCRIPT_FILENAME",  script_path);
-
-  const std::string& content_type = request.header("Content-Type");
-  if (!content_type.empty()) {
-    env.set("CONTENT_TYPE", content_type);
-  }
-
-  const std::string& body = request.body();
-  if (!body.empty()) {
-    std::ostringstream oss;
-    oss << body.size();
-    env.set("CONTENT_LENGTH", oss.str());
-  }
-
-  return env;
-}
 
 static std::string get_interpreter_from_shebang(const std::string& script_path) {
   std::ifstream ifs(script_path.c_str());
@@ -121,14 +94,14 @@ int CgiHandler::execute_async(const std::string& script_path,
     close(pipe_in[1]);
     if (dup2(pipe_in[0], STDIN_FILENO) == -1) {
       std::cerr << "Error: dup2(stdin) failed: " << strerror(errno) << "\n";
-      exit(1);
+      std::exit(1);
     }
     close(pipe_in[0]);
 
     close(pipe_out[0]);
     if (dup2(pipe_out[1], STDOUT_FILENO) == -1) {
       std::cerr << "Error: dup2(stdout) failed: " << strerror(errno) << "\n";
-      exit(1);
+      std::exit(1);
     }
     close(pipe_out[1]);
 
@@ -138,12 +111,12 @@ int CgiHandler::execute_async(const std::string& script_path,
       script_dir = script_dir.substr(0, slash);
       if (chdir(script_dir.c_str()) == -1) {
         std::cerr << "Error: chdir() failed: " << strerror(errno) << "\n";
-        exit(1);
+        std::exit(1);
       }
     }
 
-    CgiEnv env = create_env(request_, script_path);
-    char** envp = env.to_envp();
+    MetaVariables env = MetaVariables::from_request(request_, script_path);
+    char** envp = env.build_envp(); 
 
     std::vector<std::string> argv_strs = get_interpreter(script_path);
     std::vector<char*> argv_ptrs;
@@ -154,8 +127,8 @@ int CgiHandler::execute_async(const std::string& script_path,
     execve(argv_ptrs[0], &argv_ptrs[0], envp);
 
     std::cerr << "Error: execve() failed: " << strerror(errno) << "\n";
-    CgiEnv::free_envp(envp);
-    exit(1);
+    MetaVariables::destroy_envp(envp); 
+    std::exit(1);
   }
 
   // 親プロセス

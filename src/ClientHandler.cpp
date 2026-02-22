@@ -114,7 +114,7 @@ void ClientHandler::generate_response() {
       return;
     }
 
-    server_.register_cgi_input(pipe_in_fd, pipe_out_fd, cgi_pid,
+    server_.register_cgi_fd(pipe_in_fd, pipe_out_fd, cgi_pid,
                                 request_.body(), client_fd_);
 
     client_fd_ = -1;
