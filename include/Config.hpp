@@ -12,6 +12,7 @@ struct LocationContext {
 	std::vector<std::string> index; //デフォルトファイル(index.html)
 	bool is_exact_match; // プレフィックスが"="のとき
 	bool autoindex; //ディレクトリ一覧を表示するか
+	int redirect_status_code; // status_code 
 	std::string redirect_url; //リダイレクト先
 	std::string upload_store; //ファイルアップロード先
 	std::string cgi_extension; //CGI実行対象の拡張子

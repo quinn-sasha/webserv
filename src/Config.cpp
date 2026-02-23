@@ -208,6 +208,41 @@ void parse_location_directive(std::vector<std::string>& tokens, size_t i, Server
 					error_exit("Expected ';' after autoindex values");
 				}
 				i++;
+		} else if (tokens[i] == "return") {
+				i++;
+				if (i >= tokens.size() || tokens[i] == ";")
+					error_exit("return needs a value");
+				char* endptr;
+				errno = 0;
+				long val = std::strtol(tokens[i].c_str(), &endptr, 10);
+				if (errno == ERANGE || *endptr != '\0' 
+					|| (val != 301 || val != 302 || val != 307 || val != 308)) {
+					error_exit("");
+				}
+				lc.redirect_status_code = val;
+				i++;
+
+				if (i < tokens.size() && tokens[i] != ";") {
+					lc.redirect_url = tokens[i];
+					i++;
+				}
+
+				if (i >= tokens.size() || tokens[i] != ";") {
+					error_exit("Expected ';' after return values");
+				}
+				i++;
+		} else if (tokens[i] == "upload_store") {
+				i++;
+
+				if (i < tokens.size() && tokens[i] != ";") {
+					lc.upload_store = tokens[i];
+					i++;
+				}
+
+				if (i >= tokens.size() || tokens[i] != ";") {
+					error_exit("Expected ';' after upload_store values");
+				}
+				i++;
 		} else {
 			error_exit("Unknown location directive: " + tokens[i]);
 		}
