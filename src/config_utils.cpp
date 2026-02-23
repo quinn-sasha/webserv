@@ -6,11 +6,12 @@
 /*   By: ikota <ikota@student.42tokyo.jp>           +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/20 11:18:29 by ikota             #+#    #+#             */
-/*   Updated: 2026/02/20 16:19:52 by ikota            ###   ########.fr       */
+/*   Updated: 2026/02/23 17:34:56 by ikota            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
 #include "config_utils.hpp"
+#include "Config.hpp"
 
 void error_exit(const std::string& msg) {
 	std::cerr << "Error: Config file: " << msg << std::endl;
@@ -63,4 +64,42 @@ bool is_valid_port(const std::string& port) {
 		return false;
 	}
 	return true;
+}
+
+void set_single_string(std::vector<std::string>& tokens,
+				size_t& i, std::string& field, const std::string& directive_name) {
+	if (i >= tokens.size() || tokens[i] == ";")
+		error_exit(directive_name + " needs a value");
+
+	field = tokens[i++];
+
+	if (i >= tokens.size() || tokens[i++] != ";")
+		error_exit(directive_name + ": expected ';'");
+}
+
+void parse_root_wrapper(std::vector<std::string>& tokens, size_t& i, LocationContext& lc) {
+	set_single_string(tokens, i, lc.root, "root");
+}
+
+void parse_upload_store_wrapper(std::vector<std::string>& tokens, size_t& i, LocationContext& lc) {
+  set_single_string(tokens, i, lc.upload_store, "upload_store");
+}
+
+void set_vector_string(std::vector<std::string>& tokens,
+				size_t& i, std::vector<std::string> field, const std::string& directive_name) {
+	if (i >= tokens.size() || tokens[i] == ";")
+		error_exit(directive_name + " needs a value");
+
+	field.push_back(tokens[i++]);
+
+	if (i >= tokens.size() || tokens[i++] != ";")
+		error_exit(directive_name + ": expected ';'");
+}
+
+void parse_index_wrapper(std::vector<std::string>& tokens, size_t& i, LocationContext& lc) {
+	set_vector_string(tokens, i, lc.index, "index");
+}
+
+void parse_allow_methods_wrapper(std::vector<std::string>& tokens, size_t& i, LocationContext& lc) {
+	set_vector_string(tokens, i, lc.allow_methods, "allow_methods");
 }

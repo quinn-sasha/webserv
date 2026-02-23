@@ -136,6 +136,8 @@ void parse_client_max_body_size_directive(std::vector<std::string>tokens,
 	i++;
 }
 
+typedef void (*LocationParser)(std::vector<std::string>&, size_t&, LocationContext&);
+
 void parse_location_directive(std::vector<std::string>& tokens, size_t i, ServerContext& sc) {
 	// 完全一致、優先前方一致、通常前方一致
 
@@ -161,99 +163,116 @@ void parse_location_directive(std::vector<std::string>& tokens, size_t i, Server
 	}
 	i++;
 
+	static std::map<std::string, LocationParser> parsers;
+	if (parsers.empty()) {
+		parsers["root"] = parse_root_wrapper;
+		parsers["upload_store"] = parse_upload_store_wrapper;
+		parsers["index"] = parse_index_wrapper;
+		parsers["allow_methods"] = parse_allow_methods_wrapper;
+	}
+
 	while (i < tokens.size() && tokens[i] != "}") {
-		if (tokens[i] == "root") {
-			i++;
-			if (i >= tokens.size() || tokens[i] == ";")
-				error_exit("root needs a value");
-			lc.root  = tokens[i];
-			i++;
-			if (i >= tokens.size() || tokens[i] != ";") {
-				error_exit("Expected ';' after root path");
-			}
-			i++;
-		} else if (tokens[i] == "index") {
-				i++;
-				if (i >= tokens.size() || tokens[i] == ";")
-					error_exit("index needs a value");
-				while (i < tokens.size() && tokens[i] != ";") {
-					lc.index.push_back(tokens[i]);
-					i++;
-				}
-				if (i >= tokens.size() || tokens[i] != ";") {
-					error_exit("Expected ';' after index values");
-				}
-				i++;
-		} else if (tokens[i] == "allow_methods") {
-				i++;
-				if (i >= tokens.size() || tokens[i] == ";")
-					error_exit("allow_methods needs a value");
-				while (i < tokens.size() && tokens[i] != ";") {
-					lc.allow_methods.push_back(tokens[i]);
-					i++;
-				}
-				if (i >= tokens.size() || tokens[i] != ";") {
-					error_exit("Expected ';' after allow_methods values");
-				}
-				i++;
-		} else if (tokens[i] == "autoindex") {
-				i++;
-				if (i >= tokens.size() || tokens[i] == ";")
-					error_exit("autoindex needs a value");
-				if (tokens[i] != "on" && tokens[i] != "off")
-          error_exit("autoindex must be 'on' or 'off'");
-				lc.autoindex = (tokens[i] == "on");
-				i++;
-				if (i >= tokens.size() || tokens[i] != ";") {
-					error_exit("Expected ';' after autoindex values");
-				}
-				i++;
-		} else if (tokens[i] == "return") {
-				i++;
-				if (i >= tokens.size() || tokens[i] == ";")
-					error_exit("return needs a value");
-				char* endptr;
-				errno = 0;
-				long val = std::strtol(tokens[i].c_str(), &endptr, 10);
-				if (errno == ERANGE || *endptr != '\0' 
-					|| (val != 301 || val != 302 || val != 307 || val != 308)) {
-					error_exit("");
-				}
-				lc.redirect_status_code = val;
-				i++;
-
-				if (i < tokens.size() && tokens[i] != ";") {
-					lc.redirect_url = tokens[i];
-					i++;
-				}
-
-				if (i >= tokens.size() || tokens[i] != ";") {
-					error_exit("Expected ';' after return values");
-				}
-				i++;
-		} else if (tokens[i] == "upload_store") {
-				i++;
-
-				if (i < tokens.size() && tokens[i] != ";") {
-					lc.upload_store = tokens[i];
-					i++;
-				}
-
-				if (i >= tokens.size() || tokens[i] != ";") {
-					error_exit("Expected ';' after upload_store values");
-				}
-				i++;
+		std::string key = tokens[i++];
+		if (parsers.count(key)) {
+			parsers[key](tokens, i, lc);
 		} else {
-			error_exit("Unknown location directive: " + tokens[i]);
+			error_exit("Unknown location directive: " + key);
 		}
 	}
 
-	if (i >= tokens.size() || tokens[i] != "}") {
-		error_exit("Misssing '}' in location block");
-	}
-	i++;
+	// while (i < tokens.size() && tokens[i] != "}") {
+	// 	if (tokens[i] == "root") {
+	// 		i++;
+	// 		if (i >= tokens.size() || tokens[i] == ";")
+	// 			error_exit("root needs a value");
+	// 		lc.root  = tokens[i];
+	// 		i++;
+	// 		if (i >= tokens.size() || tokens[i] != ";") {
+	// 			error_exit("Expected ';' after root path");
+	// 		}
+	// 		i++;
+	// 	} else if (tokens[i] == "index") {
+	// 			i++;
+	// 			if (i >= tokens.size() || tokens[i] == ";")
+	// 				error_exit("index needs a value");
+	// 			while (i < tokens.size() && tokens[i] != ";") {
+	// 				lc.index.push_back(tokens[i]);
+	// 				i++;
+	// 			}
+	// 			if (i >= tokens.size() || tokens[i] != ";") {
+	// 				error_exit("Expected ';' after index values");
+	// 			}
+	// 			i++;
+	// 	} else if (tokens[i] == "allow_methods") {
+	// 			i++;
+	// 			if (i >= tokens.size() || tokens[i] == ";")
+	// 				error_exit("allow_methods needs a value");
+	// 			while (i < tokens.size() && tokens[i] != ";") {
+	// 				lc.allow_methods.push_back(tokens[i]);
+	// 				i++;
+	// 			}
+	// 			if (i >= tokens.size() || tokens[i] != ";") {
+	// 				error_exit("Expected ';' after allow_methods values");
+	// 			}
+	// 			i++;
+	// 	} else if (tokens[i] == "autoindex") {
+	// 			i++;
+	// 			if (i >= tokens.size() || tokens[i] == ";")
+	// 				error_exit("autoindex needs a value");
+	// 			if (tokens[i] != "on" && tokens[i] != "off")
+  //         error_exit("autoindex must be 'on' or 'off'");
+	// 			lc.autoindex = (tokens[i] == "on");
+	// 			i++;
+	// 			if (i >= tokens.size() || tokens[i] != ";") {
+	// 				error_exit("Expected ';' after autoindex values");
+	// 			}
+	// 			i++;
+	// 	} else if (tokens[i] == "return") {
+	// 			i++;
+	// 			if (i >= tokens.size() || tokens[i] == ";")
+	// 				error_exit("return needs a value");
+	// 			char* endptr;
+	// 			errno = 0;
+	// 			long val = std::strtol(tokens[i].c_str(), &endptr, 10);
+	// 			if (errno == ERANGE || *endptr != '\0'
+	// 				|| (val != 301 || val != 302 || val != 307 || val != 308)) {
+	// 				error_exit("");
+	// 			}
+	// 			lc.redirect_status_code = val;
+	// 			i++;
 
-	sc.locations.push_back(lc);
+	// 			if (i < tokens.size() && tokens[i] != ";") {
+	// 				lc.redirect_url = tokens[i];
+	// 				i++;
+	// 			}
+
+	// 			if (i >= tokens.size() || tokens[i] != ";") {
+	// 				error_exit("Expected ';' after return values");
+	// 			}
+	// 			i++;
+	// 	} else if (tokens[i] == "upload_store") {
+	// 			i++;
+
+	// 			if (i < tokens.size() && tokens[i] != ";") {
+	// 				lc.upload_store = tokens[i];
+	// 				i++;
+	// 			}
+
+	// 			if (i >= tokens.size() || tokens[i] != ";") {
+	// 				error_exit("Expected ';' after upload_store values");
+	// 			}
+	// 			i++;
+	// 	} else {
+	// 		error_exit("Unknown location directive: " + tokens[i]);
+	// 	}
+	// }
+
+	// if (i >= tokens.size() || tokens[i] != "}") {
+	// 	error_exit("Misssing '}' in location block");
+	// }
+	// i++;
+
+	// sc.locations.push_back(lc);
 }
 
 //リストを順番に読んで、ServerContextに値を代入していく
@@ -266,23 +285,25 @@ void parse_server(std::vector<std::string>& tokens, size_t& i) {
 	ServerContext sc;
 
 	while (i < tokens.size() && tokens[i] != "}") {
-		if (tokens[i] == "listen") {
-    	i++;
+		const std::string& key = tokens[i++];
+		if (key == "listen") {
     	parse_listen_directive(tokens, i, sc);
-		} else if (tokens[i] == "server_name") {
-				i++;
-			parse_server_name_directive(tokens, i, sc);
-		}	else if (tokens[i] == "client_max_body_size") {
-				i++;
-			parse_client_max_body_size_directive(tokens, i, sc);
-			// TODO parse location
-		} else if (tokens[i] == "location") {
-				i++;
-			parse_location_directive(tokens, i, sc);
-			// TODO parse location
-		} else {
-			error_exit("Unknown directive: " + tokens[i]);
+			continue;
 		}
+		if (tokens[i] == "server_name") {
+			parse_server_name_directive(tokens, i, sc);
+			continue;
+		}
+		if (tokens[i] == "client_max_body_size") {
+			parse_client_max_body_size_directive(tokens, i, sc);
+			continue;
+		}
+		if (tokens[i] == "location") {
+			parse_location_directive(tokens, i, sc);
+			continue;
+		}
+
+		error_exit("Unknown directive: " + tokens[i]);
 	}
 	if (i >= tokens.size() || tokens[i] != "}") {
 		error_exit("Unexpected end of file: missing '}' in server block");
@@ -303,7 +324,6 @@ void Config::load_file(const std::string& filepath) {
 	}
 }
 
-
-//TODO: 設定ファイルにない項目のためにコンストラクタでデフォルト値を入れておく。
-//TODO: 文字列をトークンに分ける。
-// ポートが指定されてない場合は80番ポートが使用、ポートだけなら
+// TODO: if else をたくさんつかっているところを修正する。
+// TODO: 設定ファイルにない項目のためにコンストラクタでデフォルト値を入れておく。
+// TODO: 実際にリクエストからLocationContextを検索する関数の実装。
