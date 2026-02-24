@@ -6,7 +6,7 @@
 /*   By: ikota <ikota@student.42tokyo.jp>           +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/20 11:18:29 by ikota             #+#    #+#             */
-/*   Updated: 2026/02/23 17:34:56 by ikota            ###   ########.fr       */
+/*   Updated: 2026/02/24 14:46:35 by ikota            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -77,14 +77,6 @@ void set_single_string(std::vector<std::string>& tokens,
 		error_exit(directive_name + ": expected ';'");
 }
 
-void parse_root_wrapper(std::vector<std::string>& tokens, size_t& i, LocationContext& lc) {
-	set_single_string(tokens, i, lc.root, "root");
-}
-
-void parse_upload_store_wrapper(std::vector<std::string>& tokens, size_t& i, LocationContext& lc) {
-  set_single_string(tokens, i, lc.upload_store, "upload_store");
-}
-
 void set_vector_string(std::vector<std::string>& tokens,
 				size_t& i, std::vector<std::string> field, const std::string& directive_name) {
 	if (i >= tokens.size() || tokens[i] == ";")
@@ -94,12 +86,4 @@ void set_vector_string(std::vector<std::string>& tokens,
 
 	if (i >= tokens.size() || tokens[i++] != ";")
 		error_exit(directive_name + ": expected ';'");
-}
-
-void parse_index_wrapper(std::vector<std::string>& tokens, size_t& i, LocationContext& lc) {
-	set_vector_string(tokens, i, lc.index, "index");
-}
-
-void parse_allow_methods_wrapper(std::vector<std::string>& tokens, size_t& i, LocationContext& lc) {
-	set_vector_string(tokens, i, lc.allow_methods, "allow_methods");
 }

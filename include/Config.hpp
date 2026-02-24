@@ -12,13 +12,19 @@ struct LocationContext {
 	std::vector<std::string> index; //デフォルトファイル(index.html)
 	bool is_exact_match; // プレフィックスが"="のとき
 	bool autoindex; //ディレクトリ一覧を表示するか
-	int redirect_status_code; // status_code 
+	int redirect_status_code; // status_code
 	std::string redirect_url; //リダイレクト先
 	std::string upload_store; //ファイルアップロード先
 	std::string cgi_extension; //CGI実行対象の拡張子
 	std::string cgi_path; //CGI実行ファイルのパス
 
-	LocationContext() : is_exact_match(false), autoindex(false) {}
+	LocationContext()
+			: path("/"),
+				root(".html"),
+				is_exact_match(false),
+				autoindex(false),
+				redirect_status_code(-1)
+	{}
 };
 
 struct ListenContext {
@@ -30,12 +36,14 @@ struct ServerContext {
 	std::vector<ListenContext> listens;
 	std::vector<std::string> server_names;
 	long client_max_body_size;
+	std::string server_root;
+	std::vector<std::string> server_index;
 	std::map<int, std::string> error_pages; //エラーコードとパスの対応
 	std::vector<LocationContext> locations; //このサーバー内のlocationリスト
 
-	// ServerContext()
-  //       : client_max_body_size(1000000) // 1MB
-  // {}
+	ServerContext()
+        : client_max_body_size(1000000) // 1MB
+  {}
 	const LocationContext& get_matching_location(const std::string& uri) const;
 };
 
