@@ -19,7 +19,7 @@ CgiInputHandler::~CgiInputHandler() {
 }
 
 HandlerStatus CgiInputHandler::handle_input() {
-  return kContinue;
+  return kContinue; //dont use
 }
 
 HandlerStatus CgiInputHandler::handle_output() {

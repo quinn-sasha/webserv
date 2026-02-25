@@ -1,5 +1,7 @@
 #include "MetaVariables.hpp"
 
+#include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <sstream>
 
@@ -95,28 +97,56 @@ std::string MetaVariables::get_meta(MetaVar var) const {
   return get_raw(std::string(meta_name(var)));
 }
 
+static std::string to_upper_http_env_key(const std::string& header_key) {
+  // "User-Agent" -> "HTTP_USER_AGENT"
+  std::string out = "HTTP_";
+  for (std::size_t i = 0; i < header_key.size(); ++i) {
+    unsigned char c = static_cast<unsigned char>(header_key[i]);
+    if (c == '-') out.push_back('_');
+    else out.push_back(static_cast<char>(std::toupper(c)));
+  }
+  return out;
+}
+
 MetaVariables MetaVariables::from_request(const HttpRequest& request,
                                           const std::string& script_path) {
   MetaVariables env;
 
   env.set_meta(CgiRequestMethod, request.method());
+
   env.set_meta(CgiScriptName, request.path());
   env.set_meta(CgiPathInfo, request.path());
+
   env.set_meta(CgiQueryString, request.query_string());
   env.set_meta(CgiServerProtocol, "HTTP/1.1");
   env.set_meta(CgiGatewayInterface, "CGI/1.1");
   env.set_meta(CgiScriptFilename, script_path);
 
-  const std::string& content_type = request.header("Content-Type");
-  if (!content_type.empty()) {
-    env.set_meta(CgiContentType, content_type);
+  // Content-* は CGI では特別扱い
+  {
+    const std::string& content_type = request.header("Content-Type");
+    if (!content_type.empty()) env.set_meta(CgiContentType, content_type);
+  }
+  {
+    std::ostringstream oss;
+    oss << request.body().size();
+    env.set_meta(CgiContentLength, oss.str());
   }
 
-  {
-    const std::string& body = request.body();
-    std::ostringstream oss;
-    oss << body.size();
-    env.set_meta(CgiContentLength, oss.str());
+  //  : HTTPヘッダを CGI の HTTP_* へ変換して渡す
+  //　 例: Host -> HTTP_HOST, User-Agent -> HTTP_USER_AGENT
+  const std::map<std::string, std::string>& hs = request.headers();
+  for (std::map<std::string, std::string>::const_iterator it = hs.begin();
+       it != hs.end(); ++it) {
+    const std::string& k = it->first;
+    const std::string& v = it->second;
+
+    if (k.empty()) continue;
+
+    // CGIでは CONTENT_TYPE/CONTENT_LENGTH を使うので HTTP_ 版には入れない
+    if (k == "Content-Type" || k == "Content-Length") continue;
+
+    env.set_raw(to_upper_http_env_key(k), v);
   }
 
   return env;

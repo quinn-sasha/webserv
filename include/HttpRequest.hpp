@@ -23,9 +23,12 @@ class HttpRequest {
   const std::string& version() const { return version_; }
   const std::string& header(const std::string& key) const;
   const std::string& body() const { return body_; }
-  const std::string& query_string() const { return query_string_; }  // 追加確認
+  const std::string& query_string() const { return query_string_; }  
   bool is_cgi() const;  // CGI判定
-  bool is_chunked() const { return is_chunked_; }  // ✅ 追加
+  bool is_chunked() const { return is_chunked_; }  
+
+  // ✅ 追加: ヘッダ全体を列挙できるようにする（CGIのHTTP_*変換などに使う）
+  const std::map<std::string, std::string>& headers() const { return headers_; }
 
  private:
   std::string raw_request_;
@@ -34,15 +37,15 @@ class HttpRequest {
   std::string version_;
   std::map<std::string, std::string> headers_;
   std::string body_;
-  std::string query_string_;  // 追加確認
+  std::string query_string_;  
   bool header_parsed_;
-  bool is_chunked_;        // ✅ 追加
+  bool is_chunked_;     
   std::size_t content_length_;
 
   bool parse_request_line();
   bool parse_headers();
   bool parse_body();
-  ParseResult decode_chunked(const std::string& raw_body);  // ✅ 追加
+  ParseResult decode_chunked(const std::string& raw_body);  
 };
 
 #endif  // INCLUDE_HTTPREQUEST_HPP_

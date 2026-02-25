@@ -70,7 +70,7 @@ static std::vector<std::string> get_interpreter(const std::string& script_path) 
   return args;
 }
 
-int CgiHandler::execute_async(const std::string& script_path, 
+int CgiHandler::execute_cgi(const std::string& script_path, 
                                pid_t& out_pid,
                                int& out_pipe_out_fd) {  
   int pipe_in[2];

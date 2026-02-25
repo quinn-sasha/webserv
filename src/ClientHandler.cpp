@@ -49,9 +49,9 @@ HandlerStatus ClientHandler::handle_input() {
     return kContinue;
   }
   
-  std::cout << "Method: " << request_.method() << "\n";
-  std::cout << "Path: " << request_.path() << "\n";
-  std::cout << "Query: " << request_.query_string() << "\n";  // デバッグ用
+  // std::cout << "Method: " << request_.method() << "\n";
+  // std::cout << "Path: " << request_.path() << "\n";
+  // std::cout << "Query: " << request_.query_string() << "\n";  // デバッグ用
   
   generate_response();
   
@@ -99,11 +99,11 @@ void ClientHandler::generate_response() {
     CgiHandler cgi(request_);
     std::string script_path = request_.path().substr(1);
 
-    std::cout << "Starting CGI (async): " << script_path << "\n";
+    //std::cout << "Starting CGI : " << script_path << "\n";
 
     pid_t cgi_pid;
     int pipe_out_fd;
-    int pipe_in_fd = cgi.execute_async(script_path, cgi_pid, pipe_out_fd);
+    int pipe_in_fd = cgi.execute_cgi(script_path, cgi_pid, pipe_out_fd);
 
     if (pipe_in_fd == -1) {
       response.set_status(500, "Internal Server Error");
