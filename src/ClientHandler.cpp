@@ -37,7 +37,7 @@ HandlerStatus ClientHandler::handle_input() {
     return kHandlerContinue;
   }
   ProcesseorResult result =
-      RequestProcessor::process(status, parser_.get_request());
+      RequestProcessor::process(status /*, parser_.get_request() */);
   if (result.next_action == ProcesseorResult::kExecuteCgi) {
     state_ = kExecutingCgi;
     // set up CGI

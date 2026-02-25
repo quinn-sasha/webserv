@@ -30,7 +30,7 @@ Response RequestProcessor::make_error_response(
 
 // エラーかどうかだけを判定して、status code を書き込み返す（一時的な実装）
 ProcesseorResult RequestProcessor::process(
-    ParserStatus status, const Request& request /*, const Config& config */) {
+    ParserStatus status /*, const Request& request , const Config& config */) {
   ProcesseorResult result;
   if (status != kParseFinished) {
     result.response = make_error_response(status);
