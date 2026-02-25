@@ -1,33 +1,36 @@
 #include "Parser.hpp"
 
+#include <climits>
 #include <cstddef>
+#include <cstdlib>
 #include <cstring>
+#include <list>
 #include <string>
 #include <vector>
 
 #include "string_utils.hpp"
 
-namespace {
-std::string extract_field_value(const std::string& filed_line,
-                                std::size_t delimiter_pos) {
-  std::string spaces = " \t";
-  std::size_t start = filed_line.find_first_not_of(spaces, delimiter_pos + 1);
-  if (start == std::string::npos) {
-    return "";
-  }
-  std::size_t last = filed_line.find_last_not_of(spaces);
-  return filed_line.substr(start, last - start + 1);
-}
-
 bool uses_obsolete_line_folding(const std::string& request,
                                 std::size_t crlf_pos) {
-  if (crlf_pos + 1 >= request.size()) {
+  if (crlf_pos + 2 >= request.size()) {
     return false;
   }
-  if (request[crlf_pos + 1] == ' ' || request[crlf_pos + 1] == '\t') {
+  if (request[crlf_pos + 2] == ' ' || request[crlf_pos + 2] == '\t') {
     return true;
   }
   return false;
+}
+
+namespace {
+std::list<std::string> make_canonicalized_codings(
+    const std::string& field_value) {
+  std::list<std::string> result = split_string(field_value, ",");
+  std::list<std::string>::iterator iter;
+  for (iter = result.begin(); iter != result.end(); iter++) {
+    *iter = ::trim(*iter, " \t");
+    *iter = ::to_lower(*iter);
+  }
+  return result;
 }
 }  // namespace
 
@@ -125,7 +128,7 @@ ParserStatus Parser::parse_request_line(const std::string& request_line) {
 
 // CRLF was removed from filed_line.
 // Return kParseContinue or kBadRequest.
-ParserStatus Parser::parse_filed_line(const std::string& filed_line) {
+ParserStatus Parser::parse_field_line(const std::string& filed_line) {
   if (filed_line.size() > kMaxLineLength) {
     return kContentTooLarge;
   }
@@ -134,14 +137,17 @@ ParserStatus Parser::parse_filed_line(const std::string& filed_line) {
     return kBadRequest;
   }
   std::string name = filed_line.substr(0, delimiter_pos);
-  std::string value = extract_field_value(filed_line, delimiter_pos);
+  std::string value = ::trim(filed_line.substr(delimiter_pos + 1), " \t");
+  if (name == "") {
+    return kBadRequest;
+  }
   if (name.find_first_of(" \t\r\n") != std::string::npos) {
     return kBadRequest;
   }
   if (value.find_first_of("\r\n") != std::string::npos) {
     return kBadRequest;
   }
-  name = to_lower(name);  // unifiy filed-name lowercase
+  name = ::to_lower(name);  // unifiy filed-name lowercase
   if (request_.headers.find(name) == request_.headers.end()) {
     request_.headers[name] = value;
     return kParseContinue;
@@ -158,16 +164,55 @@ ParserStatus Parser::parse_filed_line(const std::string& filed_line) {
   return kParseContinue;
 }
 
+ParserStatus Parser::parse_transfer_encodings(
+    const std::string& field_value) const {
+  std::list<std::string> codings = make_canonicalized_codings(field_value);
+  if (codings.empty()) {
+    return kBadRequest;
+  }
+  if (codings.back() != "chunked") {
+    return kBadRequest;
+  }
+  std::list<std::string>::iterator iter;
+  for (iter = codings.begin(); iter != codings.end(); iter++) {
+    // Managing implemented codings in set would be better
+    if (*iter != "chunked") {
+      return kNotImplemented;
+    }
+  }
+  return kParseContinue;
+}
+
 ParserStatus Parser::determine_next_action() const {
   if (request_.headers.find("host") == request_.headers.end()) {
     return kBadRequest;
   }
-  // TODO:
-  // * implement POST and DELETE
-  if (request_.method == kGet || request_.method == kDelete) {
-    return kParseFinished;
+  if (request_.headers.count("transfer-encoding") &&
+      request_.headers.count("content-length")) {
+    return kBadRequest;
   }
-  return kParseContinue;
+  if (request_.headers.count("transfer-encoding")) {
+    if (request_.version != kHttp11) {
+      return kBadRequest;
+    }
+    return parse_transfer_encodings(request_.headers.at("transfer-encoding"));
+  }
+  if (request_.headers.count("content-length")) {
+    std::string value = request_.headers.at("content-length");
+    char* endptr;
+    long int length = strtol(value.c_str(), &endptr, 10);
+    if (*endptr != '\0') {
+      return kBadRequest;
+    }
+    if (length < 0 || length > LONG_MAX) {
+      return kBadRequest;
+    }
+    if (static_cast<std::size_t>(length) > kMaxBodySize) {
+      return kBadRequest;
+    }
+    return kParseContinue;
+  }
+  return kParseFinished;
 }
 
 // Called by ClientHandler
@@ -203,24 +248,26 @@ ParserStatus Parser::parse_request(const char* message, ssize_t num_read) {
       if (uses_obsolete_line_folding(buffer_, crlf_pos)) {
         return kBadRequest;  // or other status to send message
       }
-      ParserStatus status = parse_filed_line(buffer_.substr(0, crlf_pos));
+      ParserStatus status = parse_field_line(buffer_.substr(0, crlf_pos));
       if (status != kParseContinue) {
         return status;
       }
       buffer_.erase(0, crlf_pos + 2);
     }
     ParserStatus status = determine_next_action();
-    if (status != kParseFinished || status != kParseContinue) {
-      return status;
-    }
     if (status == kParseFinished) {
       state_ = kParsedState;
       return kParseFinished;
+    }
+    if (status != kParseContinue) {
+      return status;
     }
     state_ = kParsingBody;
   }
   if (state_ == kParsingBody) {
     // TODO: implement parsing body
+    // Clear buffer after parse finished
   }
+  buffer_.clear();
   return kParseFinished;
 }
