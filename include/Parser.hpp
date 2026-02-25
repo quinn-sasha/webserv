@@ -47,6 +47,7 @@ class Parser {
   static const std::size_t kMaxUriLength = 2000;
   static const std::size_t kMaxMethodLength = 10;  // temporal
   static const std::size_t kMaxLineLength = 8100;
+  static const std::size_t kMaxBodySize = 1000 * 1024ul;
   static const std::size_t kMaxRequestSize = 1ul * 1024 * 1024;
   std::string buffer_;
   ParserState state_;
@@ -56,6 +57,7 @@ class Parser {
   ParserStatus parse_method_name(const std::string& method);
   ParserStatus parse_request_target(const std::string& target);
   ParserStatus parse_http_version(const std::string& version);
+  ParserStatus parse_transfer_encodings(const std::string& field_value) const;
   // Prohibit copy and assignment
   Parser(const Parser& ohter);
   Parser& operator=(const Parser& ohter);
@@ -63,7 +65,7 @@ class Parser {
  public:
   Parser() : state_(kParsingRequestLine) {}
   ParserStatus parse_request_line(const std::string& start_line);
-  ParserStatus parse_filed_line(const std::string& filed_line);
+  ParserStatus parse_field_line(const std::string& field_line);
   ParserStatus determine_next_action() const;
   ParserStatus parse_request(const char* message, ssize_t num_read);
   const Request& get_request() const { return request_; }
