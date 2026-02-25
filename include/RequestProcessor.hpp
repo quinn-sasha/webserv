@@ -17,7 +17,6 @@ struct ProcesseorResult {
 
 class RequestProcessor {
  public:
-  static Response make_error_response(ParserStatus status);
   static ProcesseorResult process(
       ParserStatus status /*, const Request& request , const Config& config */);
 };
