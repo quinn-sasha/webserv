@@ -267,6 +267,7 @@ ParserStatus Parser::parse_request(const char* message, ssize_t num_read) {
   if (state_ == kParsingBody) {
     // TODO: implement parsing body
     // Clear buffer after parse finished
+    return kParseContinue;
   }
   buffer_.clear();
   return kParseFinished;

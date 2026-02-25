@@ -67,8 +67,6 @@ TEST_F(HeadersParseTest, ParseValidHeader) {
 TEST_F(HeadersParseTest, ParseValidHeaders) {
   std::string str = "Host: webserv\r\n";
   parser.parse_request(str.c_str(), str.size());
-  str = "Content-Length: 100\r\n";
-  parser.parse_request(str.c_str(), str.size());
   str = "Accept-Language: ja\r\nAccept: image/gif, image/jpeg, */*\r\n";
   parser.parse_request(str.c_str(), str.size());
   str = "\r\n";  // end of header
@@ -153,4 +151,25 @@ TEST_F(BodyLengthParse, NotImplementedEncodings) {
   std::string str = "Transfer-Encoding: gzip, chunked\r\n\r\n";
   status = parser.parse_request(str.c_str(), str.size());
   EXPECT_EQ(status, kNotImplemented);
+}
+
+TEST_F(BodyLengthParse, ContentLengthNotNumber) {
+  ParserStatus status;
+  std::string str = "Content-Length: abc\r\n\r\n";
+  status = parser.parse_request(str.c_str(), str.size());
+  EXPECT_EQ(status, kBadRequest);
+}
+
+TEST_F(BodyLengthParse, ContentLengthTooBig) {
+  ParserStatus status;
+  std::string str = "Content-Length: 2147483647000\r\n\r\n";
+  status = parser.parse_request(str.c_str(), str.size());
+  EXPECT_EQ(status, kBadRequest);
+}
+
+TEST_F(BodyLengthParse, ContentLengthNegative) {
+  ParserStatus status;
+  std::string str = "Content-Length: -42\r\n\r\n";
+  status = parser.parse_request(str.c_str(), str.size());
+  EXPECT_EQ(status, kBadRequest);
 }
