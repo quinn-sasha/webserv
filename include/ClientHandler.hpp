@@ -18,7 +18,7 @@ class ClientHandler : public MonitoredFdHandler {
   char buffer_[buf_size];
   Parser parser_;
   Response response_;
-  ssize_t bytes_sent_;
+  std::size_t bytes_sent_;
   std::string response_str_;
 
   enum State {
