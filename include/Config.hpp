@@ -20,7 +20,7 @@ struct LocationContext {
 
 	LocationContext()
 			: path("/"),
-				root(".html"),
+				root("./html"),
 				is_exact_match(false),
 				autoindex(false),
 				redirect_status_code(-1)
@@ -38,16 +38,30 @@ struct ServerContext {
 	long client_max_body_size;
 	std::string server_root;
 	std::vector<std::string> server_index;
-	std::map<int, std::string> error_pages; //エラーコードとパスの対応
-	std::vector<LocationContext> locations; //このサーバー内のlocationリスト
+	std::map<int, std::string> error_pages;
+	std::vector<LocationContext> locations;
 
 	ServerContext()
-        : client_max_body_size(1000000) // 1MB
+        : client_max_body_size(1000000)
   {}
 	const LocationContext& get_matching_location(const std::string& uri) const;
 };
 
+struct ConfigLimits {
+    static const long PORT_MIN = 0;
+    static const long PORT_MAX = 65535;
+    static const long CLIENT_MAX_BODY_DEFAULT = 1000000;
+    static const long REDIRECT_CODE_MIN = 300;
+    static const long REDIRECT_CODE_MAX = 399;
+		static const int MOVED_PERMANENTLY = 301;
+		static const int FOUND = 302;
+		static const int TEMPORARY_REDIRECT = 307;
+		static const int PERMANENT_REDIRECT = 308;
+};
+
 class Config {
+	static const int s_port_max_number = 65535;
+	static const int s_port_min_number = 0;
 	std::vector<ServerContext> servers_;
 	std::string read_file(const std::string& filepath);
 	std::vector<std::string> tokenize(const std::string& content);

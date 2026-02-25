@@ -6,7 +6,7 @@
 /*   By: ikota <ikota@student.42tokyo.jp>           +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/20 11:18:29 by ikota             #+#    #+#             */
-/*   Updated: 2026/02/24 14:46:35 by ikota            ###   ########.fr       */
+/*   Updated: 2026/02/25 17:31:52 by ikota            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,55 +15,49 @@
 
 void error_exit(const std::string& msg) {
 	std::cerr << "Error: Config file: " << msg << std::endl;
-	std::exit(1);
+	std::exit(EXIT_FAILURE);
 }
 
-bool is_valid_ip(const std::string& ip) {
-	if (ip == "localhost") return true;
-
-	int count_dots = 0;
-	for (size_t i = 0; i < ip.size(); ++i) {
-		if (ip[i] == '.')
-			count_dots++;
-	}
-	if (count_dots != 3)
-		return false;
+void check_ip_format(const std::string& ip) {
+	if (ip == "localhost" || ip == "0.0.0.0") return;
 
 	std::stringstream ss(ip);
 	std::string segment;
 	int count = 0;
 
-	while (std::getline(ss, segment, '.')) {
-		if (segment.empty()) {
-			return false;
-		}
-		errno = 0;
-		char* endptr;
-		long val = std::strtol(segment.c_str(), &endptr, 10);
-		if (errno == ERANGE || *endptr != '\0')
-			return false;
-		if (val < 0 || val > 255) {
-			return false;
-		}
-		count++;
+	if (std::count(ip.begin(), ip.end(), ".") != 3) {
+		error_exit("Invalid IP format: '" + ip + "' (must bi x.x.x.x)");
 	}
-	return count == 4;
+
+	while (std::getline(ss, segment, '.')) {
+		if (segment.empty())
+			error_exit("Invalid IP: empty segment in '" + ip + "'");
+		safe_strtol(segment, 0, 255);
+	}
+
+	if (count != 4) {
+		error_exit("Invalid IP: '" + ip + "' must have 4 segments");
+	}
 }
 
-bool is_valid_port(const std::string& port) {
-	if (port.empty()) {
-		return false;
-	}
+long safe_strtol(const std::string& str, long min_val, long max_val) {
 	char* endptr;
 	errno = 0;
-	long val = std::strtol(port.c_str(), &endptr, 10);
-	if (errno == ERANGE || *endptr != '\0') {
-		return false;
+	long val = std::strtol(str.c_str(), &endptr, 10);
+
+	if (str.empty() || *endptr != '\0') {
+		error_exit("Invalid number format: '" + str + "'");
 	}
-	if (val < 0 || val > 65535) {
-		return false;
+
+	if (errno == ERANGE) {
+		error_exit("Number out of range (overflow): '" + str + "'");
 	}
-	return true;
+
+	if (val < min_val || val > max_val) {
+		error_exit("Value out of allowed range: '" + str + "'");
+	}
+
+	return val;
 }
 
 void set_single_string(std::vector<std::string>& tokens,
@@ -78,7 +72,7 @@ void set_single_string(std::vector<std::string>& tokens,
 }
 
 void set_vector_string(std::vector<std::string>& tokens,
-				size_t& i, std::vector<std::string> field, const std::string& directive_name) {
+				size_t& i, std::vector<std::string>& field, const std::string& directive_name) {
 	if (i >= tokens.size() || tokens[i] == ";")
 		error_exit(directive_name + " needs a value");
 

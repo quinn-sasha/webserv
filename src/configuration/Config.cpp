@@ -73,7 +73,7 @@ static void finalize_location_context(ServerContext& sc, LocationContext& lc) {
 	}
 }
 
-static void finalize_server_context(ServerContext& sc, LocationContext& lc) {
+static void finalize_server_context(ServerContext& sc) {
 	if (sc.listens.empty()) {
 		ListenContext default_listen;
 		default_listen.address = "0.0.0.0";
@@ -81,12 +81,18 @@ static void finalize_server_context(ServerContext& sc, LocationContext& lc) {
 		sc.listens.push_back(default_listen);
 	}
 
-	if (sc.locations.empty()) {
-		finalize_location_context(sc, lc);
-	}
-
 	if (sc.server_names.empty()) {
 		sc.server_names.push_back("");
+	}
+
+	for (size_t j = 0; j < sc.locations.size(); ++j) {
+		finalize_location_context(sc, sc.locations[j]);
+	}
+
+	if (sc.locations.empty()) {
+		LocationContext default_lc;
+		finalize_location_context(sc, default_lc);
+		sc.locations.push_back(default_lc);
 	}
 }
 
@@ -117,12 +123,34 @@ void parse_server(std::vector<std::string>& tokens, size_t& i) {
 		}
 	}
 
-	if (i >= tokens.size() || tokens[i] != "}") {
+	if (i >= tokens.size() || tokens[i++] != "}") {
 		error_exit("Unexpected end of file: missing '}' in server block");
 	}
-	// TODO: ここでデフォルト値を補完する ディレクティブがないときとか
-	finalize_server_context(ServerContext& sc);
+
+	finalize_server_context(sc);
 	servers_.push_back(sc);
+}
+
+const ServerContext& Config::get_server_config(int port, const std::string& host_header) const {
+	std::vector<const ServerContext*> candidates;
+	for (size_t i = 0; i < servers_.size(); ++i) {
+		for (size_t j = 0; j < servers_[i].listens.size(); ++j) {
+			if (servers_[i].listens[j].port = port) {
+				candidates.push_back(&servers_[i]);
+				break;
+			}
+		}
+	}
+
+	for (size_t i = 0; i < candidates.size(); ++i) {
+		for (size_t j = 0; j < candidates[i]->server_names.size(); ++j) {
+			if (candidates[i]->server_names[j] = host_header) {
+				return *candidates[i];
+			}
+		}
+	}
+
+	return *candidates[0];
 }
 
 void Config::load_file(const std::string& filepath) {
@@ -136,6 +164,3 @@ void Config::load_file(const std::string& filepath) {
 		}
 	}
 }
-
-// TODO: 設定ファイルにない項目のためにコンストラクタでデフォルト値を入れておく。
-// TODO: 実際にリクエストからLocationContextを検索する関数の実装。
