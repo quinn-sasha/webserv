@@ -164,28 +164,33 @@ ParserStatus Parser::parse_field_line(const std::string& filed_line) {
   return kParseContinue;
 }
 
-ParserStatus Parser::parse_transfer_encodings(
-    const std::string& field_value) const {
-  std::list<std::string> codings = make_canonicalized_codings(field_value);
-  if (codings.empty()) {
+ParserStatus Parser::parse_transfer_encodings(const std::string& field_value) {
+  std::list<std::string> encodings = make_canonicalized_codings(field_value);
+  if (encodings.empty()) {
     return kBadRequest;
   }
-  if (codings.back() != "chunked") {
+  if (encodings.back() != "chunked") {
     return kBadRequest;
   }
   std::list<std::string>::iterator iter;
-  for (iter = codings.begin(); iter != codings.end(); iter++) {
+  for (iter = encodings.begin(); iter != encodings.end(); iter++) {
     // Managing implemented codings in set would be better
     if (*iter != "chunked") {
       return kNotImplemented;
     }
   }
+  request_.body_parse_info.is_chunked = true;
+  request_.body_parse_info.encodings = encodings;
   return kParseContinue;
 }
 
-ParserStatus Parser::determine_next_action() const {
+ParserStatus Parser::determine_next_action() {
   if (request_.headers.find("host") == request_.headers.end()) {
     return kBadRequest;
+  }
+  if (!request_.headers.count("transfer-encoding") &&
+      !request_.headers.count("content-length")) {
+    return kParseFinished;
   }
   if (request_.headers.count("transfer-encoding") &&
       request_.headers.count("content-length")) {
@@ -197,22 +202,21 @@ ParserStatus Parser::determine_next_action() const {
     }
     return parse_transfer_encodings(request_.headers.at("transfer-encoding"));
   }
-  if (request_.headers.count("content-length")) {
-    std::string value = request_.headers.at("content-length");
-    char* endptr;
-    long int length = strtol(value.c_str(), &endptr, 10);
-    if (*endptr != '\0') {
-      return kBadRequest;
-    }
-    if (length < 0 || length > LONG_MAX) {
-      return kBadRequest;
-    }
-    if (static_cast<std::size_t>(length) > kMaxBodySize) {
-      return kBadRequest;
-    }
-    return kParseContinue;
+  std::string value = request_.headers.at("content-length");
+  char* endptr;
+  long int length = strtol(value.c_str(), &endptr, 10);
+  if (*endptr != '\0') {
+    return kBadRequest;
   }
-  return kParseFinished;
+  if (length < 0 || length > LONG_MAX) {
+    return kBadRequest;
+  }
+  if (static_cast<std::size_t>(length) > kMaxBodySize) {
+    return kBadRequest;
+  }
+  request_.body_parse_info.is_chunked = false;
+  request_.body_parse_info.content_length = static_cast<std::size_t>(length);
+  return kParseContinue;
 }
 
 // Called by ClientHandler

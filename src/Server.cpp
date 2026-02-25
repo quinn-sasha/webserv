@@ -82,6 +82,9 @@ HandlerStatus Server::handle_fd_event(int pollfd_index) {
   if (poll_fd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
     return handler->handle_poll_error();
   }
+  if (!(poll_fd.revents & POLLIN) && !(poll_fd.revents & POLLOUT)) {
+    return kHandlerContinue;
+  }
   if (poll_fd.revents & POLLIN) {
     HandlerStatus status = handler->handle_input();
     if (status == kHandlerFatalError) {
@@ -97,17 +100,15 @@ HandlerStatus Server::handle_fd_event(int pollfd_index) {
       set_pollfd_out(poll_fd, poll_fd.fd);
     }
   }
-  if (poll_fd.revents & POLLOUT) {
-    HandlerStatus status = handler->handle_output();
-    if (status == kHandlerFatalError) {
-      return kHandlerFatalError;
-    }
-    if (status == kHandlerClosed) {
-      return kHandlerClosed;
-    }
-    if (status == kHandlerSent) {
-      return kHandlerClosed;  // TODO: implement keep-alive
-    }
+  HandlerStatus status = handler->handle_output();
+  if (status == kHandlerFatalError) {
+    return kHandlerFatalError;
+  }
+  if (status == kHandlerClosed) {
+    return kHandlerClosed;
+  }
+  if (status == kHandlerSent) {
+    return kHandlerClosed;  // TODO: implement keep-alive
   }
   return kHandlerContinue;
 }
