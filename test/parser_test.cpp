@@ -6,44 +6,87 @@
 
 TEST(RequestLineParse, InvalidRequestLine) {
   Parser parser;
-  EXPECT_EQ(parser.parse_request_line("GET/t/ HTTP/1.1"), kBadRequest);
-  EXPECT_EQ(parser.parse_request_line("GET   / HTTP/1.1"), kBadRequest);
-  EXPECT_EQ(parser.parse_request_line("GET GET / HTTP/1.1"), kBadRequest);
-  EXPECT_EQ(parser.parse_request_line(""), kBadRequest);
-  EXPECT_EQ(parser.parse_request_line("GET"), kBadRequest);
+  std::string str;
+  str = "GET/t/ HTTP/1.1\r\n";
+  EXPECT_EQ(parser.parse_request(str.c_str(), str.size()), kBadRequest);
+  str = "GET   / HTTP/1.1\r\n";
+  EXPECT_EQ(parser.parse_request(str.c_str(), str.size()), kBadRequest);
+  str = "GET GET / HTTP/1.1\r\n";
+  EXPECT_EQ(parser.parse_request(str.c_str(), str.size()), kBadRequest);
+  str = "\r\n";
+  EXPECT_EQ(parser.parse_request(str.c_str(), str.size()), kBadRequest);
+  str = "GET\r\n";
+  EXPECT_EQ(parser.parse_request(str.c_str(), str.size()), kBadRequest);
 }
 
 TEST(RequestLineParse, InvalidMethod) {
   Parser parser;
-  EXPECT_EQ(parser.parse_request_line("Get / HTTP/1.1"), kNotImplemented);
-  EXPECT_EQ(parser.parse_request_line("UNKNOWN / HTTP/1.1"), kNotImplemented);
+  std::string str;
+  str = "Get / HTTP/1.1\r\n";
+  EXPECT_EQ(parser.parse_request(str.c_str(), str.size()), kNotImplemented);
+  str = "UNKNOWN / HTTP/1.1\r\n";
+  EXPECT_EQ(parser.parse_request(str.c_str(), str.size()), kNotImplemented);
 }
 
 TEST(RequestLineParse, InvalidRequestTarget) {
-  Parser parser;
-  EXPECT_EQ(parser.parse_request_line("GET index.html HTTP/1.1"), kBadRequest);
-  EXPECT_EQ(parser.parse_request_line("GET abc/ HTTP/1.1"), kBadRequest);
-  EXPECT_EQ(parser.parse_request_line("GET /index.html / HTTP/1.1"),
-            kBadRequest);
+  {
+    Parser parser;
+    std::string str = "GET index.html HTTP/1.1\r\n";
+    EXPECT_EQ(parser.parse_request(str.c_str(), str.size()), kBadRequest);
+  }
+  {
+    Parser parser;
+    std::string str = "GET abc/ HTTP/1.1\r\n";
+    EXPECT_EQ(parser.parse_request(str.c_str(), str.size()), kBadRequest);
+  }
+  {
+    Parser parser;
+    std::string str = "GET /index.html / HTTP/1.1\r\n";
+    EXPECT_EQ(parser.parse_request(str.c_str(), str.size()), kBadRequest);
+  }
 }
 
 TEST(RequestLineParse, InvalidVersion) {
-  Parser parser;
-  EXPECT_EQ(parser.parse_request_line("GET / http/1.1"), kBadRequest);
-  EXPECT_EQ(parser.parse_request_line("GET / 1.1"), kBadRequest);
-  EXPECT_EQ(parser.parse_request_line("GET / HTTP/1.+1"), kBadRequest);
-  EXPECT_EQ(parser.parse_request_line("GET / HTTP/2.0"), kVersionNotSupported);
+  {
+    Parser parser;
+    std::string str = "GET / http/1.1\r\n";
+    EXPECT_EQ(parser.parse_request(str.c_str(), str.size()), kBadRequest);
+  }
+  {
+    Parser parser;
+    std::string str = "GET / 1.1\r\n";
+    EXPECT_EQ(parser.parse_request(str.c_str(), str.size()), kBadRequest);
+  }
+  {
+    Parser parser;
+    std::string str = "GET / HTTP/1.+1\r\n";
+    EXPECT_EQ(parser.parse_request(str.c_str(), str.size()), kBadRequest);
+  }
+  {
+    Parser parser;
+    std::string str = "GET / HTTP/2.0\r\n";
+    EXPECT_EQ(parser.parse_request(str.c_str(), str.size()),
+              kVersionNotSupported);
+  }
 }
 
 TEST(RequestLineParse, PositiveTest) {
-  Parser parser;
-  EXPECT_EQ(parser.parse_request_line("GET / HTTP/1.0"), kParseContinue);
-  EXPECT_EQ(parser.get_request().method, kGet);
-  EXPECT_EQ(parser.get_request().target, "/");
-  EXPECT_EQ(parser.get_request().version, kHttp10);
-
-  EXPECT_EQ(parser.parse_request_line("GET / HTTP/1.1"), kParseContinue);
-  EXPECT_EQ(parser.get_request().version, kHttp11);
+  {
+    Parser parser;
+    std::string str = "GET / HTTP/1.0\r\n";
+    EXPECT_EQ(parser.parse_request(str.c_str(), str.size()), kParseContinue);
+    EXPECT_EQ(parser.get_request().method, kGet);
+    EXPECT_EQ(parser.get_request().target, "/");
+    EXPECT_EQ(parser.get_request().version, kHttp10);
+  }
+  {
+    Parser parser;
+    std::string str = "GET / HTTP/1.1\r\n";
+    EXPECT_EQ(parser.parse_request(str.c_str(), str.size()), kParseContinue);
+    EXPECT_EQ(parser.get_request().method, kGet);
+    EXPECT_EQ(parser.get_request().target, "/");
+    EXPECT_EQ(parser.get_request().version, kHttp11);
+  }
 }
 
 class HeadersParseTest : public testing::Test {
