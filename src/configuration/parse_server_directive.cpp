@@ -152,6 +152,7 @@ void parse_location_directive(std::vector<std::string>& tokens, size_t& i,
   }
 }
 
+// TODO: この関数についてkotaに質問する
 const LocationContext& ServerContext::get_matching_location(
     const std::string& uri) const {
   const LocationContext* best_match = NULL;
