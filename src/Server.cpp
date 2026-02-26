@@ -56,17 +56,17 @@ void Server::run() {
     }
     // CAUTION: temporary block infinitely (temporal)
     if (poll(&poll_fds_.front(), poll_fds_.size(), -1) == -1) {
-      throw SystemError("poll");
+      throw SystemError("poll()");
     }
     for (std::size_t i = 0; i < poll_fds_.size(); i++) {
       HandlerStatus status = handle_fd_event(i);
-      if (status == kContinue) {
+      if (status == kHandlerContinue) {
         continue;
       }
-      if (status == kFatalError) {
+      if (status == kHandlerFatalError) {
         throw std::runtime_error("Fatal error on monitored fd");
       }
-      if (status == kClosed) {
+      if (status == kHandlerClosed) {
         remove_client(i);
         i--;
       }
@@ -82,34 +82,35 @@ HandlerStatus Server::handle_fd_event(int pollfd_index) {
   if (poll_fd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
     return handler->handle_poll_error();
   }
+  if (!(poll_fd.revents & POLLIN) && !(poll_fd.revents & POLLOUT)) {
+    return kHandlerContinue;
+  }
   if (poll_fd.revents & POLLIN) {
     HandlerStatus status = handler->handle_input();
-    if (status == kFatalError) {
-      return kFatalError;
+    if (status == kHandlerFatalError) {
+      return kHandlerFatalError;
     }
-    if (status == kClosed) {
-      return kClosed;
+    if (status == kHandlerClosed) {
+      return kHandlerClosed;
     }
-    if (status == kAccepted || status == kContinue) {
-      return kContinue;
+    if (status == kHandlerAccepted || status == kHandlerContinue) {
+      return kHandlerContinue;
     }
-    if (status == kReceived) {
+    if (status == kHandlerReceived) {
       set_pollfd_out(poll_fd, poll_fd.fd);
     }
   }
-  if (poll_fd.revents & POLLOUT) {
-    HandlerStatus status = handler->handle_output();
-    if (status == kFatalError) {
-      return kFatalError;
-    }
-    if (status == kClosed) {
-      return kClosed;
-    }
-    if (status == kAllSent) {
-      set_pollfd_in(poll_fd, poll_fd.fd);
-    }
+  HandlerStatus status = handler->handle_output();
+  if (status == kHandlerFatalError) {
+    return kHandlerFatalError;
   }
-  return kContinue;
+  if (status == kHandlerClosed) {
+    return kHandlerClosed;
+  }
+  if (status == kHandlerSent) {
+    return kHandlerClosed;  // TODO: implement keep-alive
+  }
+  return kHandlerContinue;
 }
 
 void Server::remove_client(int pollfd_index) {

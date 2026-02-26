@@ -10,8 +10,12 @@ OBJ_DIR  := objs
 SRCS_NO_MAIN := $(SRC_DIR)/AcceptHandler.cpp \
                 $(SRC_DIR)/ClientHandler.cpp \
                 $(SRC_DIR)/ListenSocket.cpp \
+                $(SRC_DIR)/Parser.cpp \
+                $(SRC_DIR)/RequestProcessor.cpp \
+                $(SRC_DIR)/Response.cpp \
                 $(SRC_DIR)/Server.cpp \
-                $(SRC_DIR)/pollfd_utils.cpp
+                $(SRC_DIR)/pollfd_utils.cpp \
+                $(SRC_DIR)/string_utils.cpp
 
 OBJS_NO_MAIN := $(SRCS_NO_MAIN:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
 MAIN_OBJ     := $(OBJ_DIR)/main.o
