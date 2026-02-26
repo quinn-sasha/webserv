@@ -216,3 +216,28 @@ TEST_F(BodyLengthParse, ContentLengthNegative) {
   status = parser.parse_request(str.c_str(), str.size());
   EXPECT_EQ(status, kBadRequest);
 }
+
+class ParseBody : public testing::Test {
+ protected:
+  Parser parser;
+
+  void SetUp() override {
+    std::string str = "GET / HTTP/1.1\r\n";
+    parser.parse_request(str.c_str(), str.size());
+    str = "Host: example.com\r\n";
+    parser.parse_request(str.c_str(), str.size());
+  }
+};
+
+TEST_F(ParseBody, SmallContentLength) {
+  std::string str;
+  str = "Content-Length: 5\r\n\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "hello\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "0\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "\r\n";
+  EXPECT_EQ(parser.parse_request(str.c_str(), str.size()), kParseFinished);
+  EXPECT_EQ(parser.get_request().body, "hello");
+}

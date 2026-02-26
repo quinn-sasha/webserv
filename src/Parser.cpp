@@ -397,5 +397,5 @@ ParserStatus Parser::parse_request(const char* message, ssize_t num_read) {
     buffer_.clear();
     return status;
   }
-  return kParseContinue;
+  return kParseContinue;  // Won't reach here
 }
