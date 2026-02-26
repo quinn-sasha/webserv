@@ -1,6 +1,7 @@
 #ifndef INCLUDE_PARSER_HPP_
 #define INCLUDE_PARSER_HPP_
 
+#include <cstddef>
 #include <list>
 #include <map>
 #include <string>
@@ -12,9 +13,11 @@ enum ParserStatus {
   kVersionNotSupported,
   kMethodNotAllowed,
   kContentTooLarge,
+  kRequestHeaderFieldsTooLarge,
   // Custom status used in Parser class
   kParseContinue,
   kParseFinished,
+  kKeepParsingChunked,  // Just for parse_chunked_size_section()
 };
 
 enum HttpMethod {
@@ -34,7 +37,22 @@ enum ParserState {
   kParsingRequestLine,
   kParsingHeaders,
   kParsingBody,
-  kParsedState,
+};
+
+enum ChunkedState {
+  kParsingSize,
+  kParsingExtension,
+  kParsingData,
+  kParsingCrlf,
+  kParsingTrailer,
+};
+
+struct ChunkedData {
+  ChunkedState state;
+  std::size_t remaining_size;
+  std::string tmp_buf;  // Since Parser buffer is cleared on each call
+
+  ChunkedData() : state(kParsingSize), remaining_size(0) {}
 };
 
 struct Request {
@@ -43,7 +61,7 @@ struct Request {
   HttpVersion version;
   std::map<std::string, std::string> headers;
 
-  struct BodyParseInfo {
+  struct BodyLengthInfo {
     bool is_chunked;
     std::list<std::string> encodings;
     std::size_t content_length;
@@ -61,6 +79,7 @@ class Parser {
   std::string buffer_;
   ParserState state_;
   Request request_;
+  ChunkedData chunked_data_;
 
   // Helpers
   ParserStatus parse_method_name(const std::string& method);
@@ -70,6 +89,10 @@ class Parser {
   ParserStatus parse_request_line(const std::string& start_line);
   ParserStatus parse_field_line(const std::string& field_line);
   ParserStatus determine_next_action();
+  ParserStatus parse_chunked_size_section();
+  ParserStatus parse_chunked_body(const std::string& body);
+  ParserStatus parse_content_length_body(const std::string& body);
+  ParserStatus parse_body(const std::string& body);
   // Prohibit copy and assignment
   Parser(const Parser& ohter);
   Parser& operator=(const Parser& ohter);

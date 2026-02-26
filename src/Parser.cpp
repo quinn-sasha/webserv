@@ -1,6 +1,5 @@
 #include "Parser.hpp"
 
-#include <climits>
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
@@ -22,6 +21,18 @@ bool uses_obsolete_line_folding(const std::string& request,
 }
 
 namespace {
+int convert_to_size(std::size_t& result, const std::string& input, int base) {
+  int tmp_res;
+  if (convert_to_integer(tmp_res, input, base) == -1) {
+    return -1;
+  }
+  if (tmp_res < 0) {
+    return -1;
+  }
+  result = static_cast<std::size_t>(tmp_res);
+  return 0;
+}
+
 std::list<std::string> make_canonicalized_codings(
     const std::string& field_value) {
   std::list<std::string> result = split_string(field_value, ",");
@@ -130,7 +141,7 @@ ParserStatus Parser::parse_request_line(const std::string& request_line) {
 // Return kParseContinue or kBadRequest.
 ParserStatus Parser::parse_field_line(const std::string& filed_line) {
   if (filed_line.size() > kMaxLineLength) {
-    return kContentTooLarge;
+    return kRequestHeaderFieldsTooLarge;
   }
   std::size_t delimiter_pos = filed_line.find(':');
   if (delimiter_pos == std::string::npos) {
@@ -203,20 +214,134 @@ ParserStatus Parser::determine_next_action() {
     return parse_transfer_encodings(request_.headers.at("transfer-encoding"));
   }
   std::string value = request_.headers.at("content-length");
-  char* endptr;
-  long int length = strtol(value.c_str(), &endptr, 10);
-  if (*endptr != '\0') {
+  std::size_t length;
+  if (convert_to_size(length, value, 10) == -1) {
     return kBadRequest;
   }
-  if (length < 0 || length > LONG_MAX) {
-    return kBadRequest;
+  if (length > kMaxBodySize) {
+    return kContentTooLarge;
   }
-  if (static_cast<std::size_t>(length) > kMaxBodySize) {
-    return kBadRequest;
-  }
+  request_.body_parse_info.content_length = length;
   request_.body_parse_info.is_chunked = false;
-  request_.body_parse_info.content_length = static_cast<std::size_t>(length);
   return kParseContinue;
+}
+
+ParserStatus Parser::parse_chunked_size_section() {
+  std::size_t crlf_pos = chunked_data_.tmp_buf.find("\r\n");
+  if (crlf_pos == std::string::npos) {
+    return kParseContinue;
+  }
+  std::size_t word_end = crlf_pos;
+  std::size_t delimiter_pos = chunked_data_.tmp_buf.find(";");
+  if (delimiter_pos != std::string::npos && delimiter_pos < word_end) {
+    word_end = delimiter_pos;
+  }
+  std::string size_str = chunked_data_.tmp_buf.substr(0, word_end);
+  if (convert_to_size(chunked_data_.remaining_size, size_str, 16) == -1) {
+    return kBadRequest;
+  }
+  if (chunked_data_.remaining_size == 0) {  // last chunk
+    chunked_data_.state = kParsingTrailer;
+    chunked_data_.tmp_buf.erase(0, crlf_pos + 2);  // Discard chunk extension
+    return kKeepParsingChunked;
+  }
+  if (delimiter_pos == std::string::npos) {
+    chunked_data_.state = kParsingData;
+    chunked_data_.tmp_buf.erase(0, crlf_pos + 2);
+  } else {
+    chunked_data_.state = kParsingExtension;
+    chunked_data_.tmp_buf.erase(0, delimiter_pos + 1);
+  }
+  return kKeepParsingChunked;
+}
+
+ParserStatus Parser::parse_chunked_body(const std::string& body) {
+  chunked_data_.tmp_buf.append(body);
+  while (true) {
+    if (chunked_data_.tmp_buf.size() > kMaxBodySize) {
+      return kContentTooLarge;
+    }
+    if (request_.body.size() > kMaxBodySize) {
+      return kContentTooLarge;
+    }
+    if (chunked_data_.state == kParsingSize) {
+      ParserStatus status = parse_chunked_size_section();
+      if (status != kKeepParsingChunked) {
+        return status;
+      }
+    }
+    if (chunked_data_.state == kParsingTrailer) {
+      break;
+    }
+    if (chunked_data_.state == kParsingExtension) {
+      // Just discard
+      std::size_t crlf_pos = chunked_data_.tmp_buf.find("\r\n");
+      chunked_data_.tmp_buf.erase(0, crlf_pos + 2);
+      chunked_data_.state = kParsingData;
+    }
+    if (chunked_data_.state == kParsingData) {
+      std::size_t size_read = chunked_data_.tmp_buf.size();
+      std::size_t remain = chunked_data_.remaining_size;
+      if (size_read < remain) {
+        request_.body.append(chunked_data_.tmp_buf);
+        chunked_data_.tmp_buf.clear();
+        chunked_data_.remaining_size -= size_read;
+        return kParseContinue;
+      }
+      request_.body.append(chunked_data_.tmp_buf.substr(0, remain));
+      chunked_data_.tmp_buf.erase(0, remain);
+      chunked_data_.remaining_size = 0;
+      chunked_data_.state = kParsingCrlf;
+    }
+    if (chunked_data_.state == kParsingCrlf) {
+      if (chunked_data_.tmp_buf.size() < 2) {
+        return kParseContinue;
+      }
+      std::size_t crlf_pos = chunked_data_.tmp_buf.find("\r\n");
+      if (crlf_pos == std::string::npos) {
+        return kBadRequest;
+      }
+      if (crlf_pos != 0) {
+        return kBadRequest;
+      }
+      chunked_data_.state = kParsingSize;
+      chunked_data_.tmp_buf.erase(0, 2);
+      continue;
+    }
+  }
+  // after last chunk
+  while (true) {
+    if (chunked_data_.tmp_buf.size() > kMaxLineLength) {
+      return kContentTooLarge;
+    }
+    std::size_t crlf_pos = chunked_data_.tmp_buf.find("\r\n");
+    if (crlf_pos == std::string::npos) {
+      return kParseContinue;
+    }
+    if (crlf_pos == 0) {
+      return kParseFinished;
+    }
+    chunked_data_.tmp_buf.erase(0, crlf_pos + 2);  // Just discard
+  }
+}
+
+// Request Pipelining is not supported
+ParserStatus Parser::parse_content_length_body(const std::string& body) {
+  std::size_t remaining =
+      request_.body_parse_info.content_length - request_.body.size();
+  if (body.size() < remaining) {
+    request_.body.append(body);
+    return kParseContinue;
+  }
+  request_.body.append(body.substr(0, remaining));
+  return kParseFinished;
+}
+
+ParserStatus Parser::parse_body(const std::string& body) {
+  if (request_.body_parse_info.is_chunked) {
+    return parse_chunked_body(body);
+  }
+  return parse_content_length_body(body);
 }
 
 // Called by ClientHandler
@@ -260,7 +385,6 @@ ParserStatus Parser::parse_request(const char* message, ssize_t num_read) {
     }
     ParserStatus status = determine_next_action();
     if (status == kParseFinished) {
-      state_ = kParsedState;
       return kParseFinished;
     }
     if (status != kParseContinue) {
@@ -269,10 +393,9 @@ ParserStatus Parser::parse_request(const char* message, ssize_t num_read) {
     state_ = kParsingBody;
   }
   if (state_ == kParsingBody) {
-    // TODO: implement parsing body
-    // Clear buffer after parse finished
-    return kParseContinue;
+    ParserStatus status = parse_body(buffer_);
+    buffer_.clear();
+    return status;
   }
-  buffer_.clear();
-  return kParseFinished;
+  return kParseContinue;
 }
