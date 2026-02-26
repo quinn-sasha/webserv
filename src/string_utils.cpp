@@ -38,3 +38,21 @@ std::string trim(const std::string& target, std::string to_delete) {
   }
   return target.substr(start, last - start + 1);
 }
+
+// Returns 0 if success, otherwise -1
+int convert_to_integer(int& result, std::string input, int base) {
+  long int tmp_res = 0;
+  char* endptr;
+  tmp_res = std::strtol(input.c_str(), &endptr, base);
+  if (*endptr != '\0') {
+    return -1;
+  }
+  if (tmp_res == LONG_MIN || tmp_res == LONG_MAX) {
+    return -1;
+  }
+  if (tmp_res < INT_MIN || tmp_res > INT_MAX) {
+    return -1;
+  }
+  result = static_cast<int>(tmp_res);
+  return 0;
+}
