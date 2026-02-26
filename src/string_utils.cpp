@@ -40,7 +40,7 @@ std::string trim(const std::string& target, std::string to_delete) {
 }
 
 // Returns 0 if success, otherwise -1
-int convert_to_integer(int& result, std::string input, int base) {
+int convert_to_integer(int& result, const std::string& input, int base) {
   long int tmp_res = 0;
   char* endptr;
   tmp_res = std::strtol(input.c_str(), &endptr, base);

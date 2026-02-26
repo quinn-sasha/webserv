@@ -11,6 +11,6 @@ std::list<std::string> split_string(const std::string& target,
 
 std::string trim(const std::string& target, std::string to_delete);
 
-int convert_to_integer(int& result, std::string input, int base);
+int convert_to_integer(int& result, const std::string& input, int base);
 
 #endif  // INCLUDE_STRING_UTILS_HPP_

@@ -26,6 +26,10 @@ TEST(StringUtilsTest, ConvertToInteger) {
   EXPECT_EQ(res, 0);
   EXPECT_EQ(num, 0);
 
+  res = convert_to_integer(num, "00000000", 16);
+  EXPECT_EQ(res, 0);
+  EXPECT_EQ(num, 0);
+
   res = convert_to_integer(num, "98ab", 10);
   EXPECT_EQ(res, -1);
 
