@@ -23,7 +23,7 @@ std::vector<std::string> Config::tokenize(const std::string& content) {
 		char c = content[i];
 		if (c == '#') {
 			if (!current_word.empty()) {
-				tokens.push_back(current_word); // token
+				tokens.push_back(current_word);
 				current_word.clear();
 			}
 			while (i < content.size() && content[i] != '\n') {
@@ -69,7 +69,8 @@ static void finalize_location_context(ServerContext& sc, LocationContext& lc) {
 	}
 
 	if (lc.allow_methods.empty()) {
-		lc.allow_methods.push_back("GET");
+		lc.allow_methods.push_back("get");
+		lc.allow_methods.push_back("post");
 	}
 }
 

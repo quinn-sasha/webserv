@@ -6,7 +6,7 @@
 /*   By: ikota <ikota@student.42tokyo.jp>           +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/20 11:18:29 by ikota             #+#    #+#             */
-/*   Updated: 2026/02/25 17:31:52 by ikota            ###   ########.fr       */
+/*   Updated: 2026/02/26 15:48:57 by ikota            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -76,7 +76,9 @@ void set_vector_string(std::vector<std::string>& tokens,
 	if (i >= tokens.size() || tokens[i] == ";")
 		error_exit(directive_name + " needs a value");
 
-	field.push_back(tokens[i++]);
+	while (i < tokens.size() || tokens[i++] != ";") {
+		field.push_back(tokens[i++]);
+	}
 
 	if (i >= tokens.size() || tokens[i++] != ";")
 		error_exit(directive_name + ": expected ';'");

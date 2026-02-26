@@ -6,7 +6,7 @@
 /*   By: ikota <ikota@student.42tokyo.jp>           +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/24 14:48:42 by ikota             #+#    #+#             */
-/*   Updated: 2026/02/25 17:39:07 by ikota            ###   ########.fr       */
+/*   Updated: 2026/02/26 16:27:30 by ikota            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -21,7 +21,7 @@ void parse_listen_directive(std::vector<std::string>& tokens, size_t& i, ServerC
     error_exit("Empty listen");
   }
 
-	ListenContext lc;
+	ListenConfig lc;
   std::string val = tokens[i];
   size_t colon_pos = val.find(':');
 
@@ -32,11 +32,11 @@ void parse_listen_directive(std::vector<std::string>& tokens, size_t& i, ServerC
     if (lc.address == "localhost") {
         lc.address = "127.0.0.1";
 		std::string port_str = val.substr(colon_pos + 1);
-		lc.port = static_cast<int>(safe_strtol(port_str, ConfigLimits::PORT_MIN, ConfigLimits::PORT_MAX));
+		lc.port = static_cast<int>(safe_strtol(port_str, ConfigLimits::kPortMin, ConfigLimits::kPortMax));
   } else {
 		// PORT only
 		lc.address = "0.0.0.0";
-		lc.port = static_cast<int>(safe_strtol(val, ConfigLimits::PORT_MIN, ConfigLimits::PORT_MAX));
+		lc.port = static_cast<int>(safe_strtol(val, ConfigLimits::kPortMin, ConfigLimits::kPortMax));
   }
 
 		sc.listens.push_back(lc);
@@ -102,7 +102,6 @@ void parse_error_page_directive(std::vector<std::string>& tokens, size_t&i, Serv
 typedef void (*LocationParser)(std::vector<std::string>&, size_t&, LocationContext&);
 
 void parse_location_directive(std::vector<std::string>& tokens, size_t& i, ServerContext& sc) {
-	// 完全一致、優先前方一致、通常前方一致
 
 	LocationContext lc;
 	lc.is_exact_match = false;
