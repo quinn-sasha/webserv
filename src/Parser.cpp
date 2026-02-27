@@ -45,8 +45,7 @@ std::list<std::string> make_canonicalized_codings(
 }
 }  // namespace
 
-// request line だけ見て判断すると結果は OK or 501(Not implemented)
-// 405(Method not allowed)かどうかはrequest-targetとセットで判別できる
+// 405(Method not allowed)かどうかはrequest-targetとCofigで判断できる
 ParserStatus Parser::parse_method_name(const std::string& method) {
   request_.method = kUnknownMethod;
   if (method.size() > kMaxMethodLength) {
