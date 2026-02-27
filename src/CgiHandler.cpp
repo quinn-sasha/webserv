@@ -87,8 +87,10 @@ int CgiHandler::execute_cgi(const std::string& script_path) {
 
   if (cgi_pid_ == -1) {
     std::cerr << "Error: fork() failed: " << strerror(errno) << "\n";
-    close(pipe_in[0]);  close(pipe_in[1]);
-    close(pipe_out[0]); close(pipe_out[1]);
+    close(pipe_in[0]);  
+    close(pipe_in[1]);
+    close(pipe_out[0]); 
+    close(pipe_out[1]);
     return -1;
   }
 

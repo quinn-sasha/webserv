@@ -9,7 +9,7 @@
 
 int main() {
   try {
-    // TODO: temporal setting
+    // TODO: temporal setting. Refer to Cofig object
     std::vector<ListenConfig> listen_configs;
     struct ListenConfig config1 = {"localhost", "8888"};
     listen_configs.push_back(config1);

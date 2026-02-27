@@ -4,7 +4,6 @@
 
 #include "Parser.hpp"
 
-// TODO: make_error_responseをResponseクラスのメンバー関数にする
 void Response::prepare_error_response(ParserStatus status /*, request */) {
   switch (status) {
     case kBadRequest:
