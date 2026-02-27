@@ -108,7 +108,7 @@ HandlerStatus Server::handle_fd_event(int pollfd_index) {
     return kHandlerClosed;
   }
   if (status == kHandlerSent) {
-    return kHandlerClosed;  // TODO: implement keep-alive
+    return kHandlerClosed;  // TODO: implement keep-alive (optional)
   }
   return kHandlerContinue;
 }

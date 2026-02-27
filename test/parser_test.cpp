@@ -216,3 +216,161 @@ TEST_F(BodyLengthParse, ContentLengthNegative) {
   status = parser.parse_request(str.c_str(), str.size());
   EXPECT_EQ(status, kBadRequest);
 }
+
+class ParseBody : public testing::Test {
+ protected:
+  Parser parser;
+
+  void SetUp() override {
+    std::string str = "GET / HTTP/1.1\r\n";
+    parser.parse_request(str.c_str(), str.size());
+    str = "Host: example.com\r\n";
+    parser.parse_request(str.c_str(), str.size());
+  }
+};
+
+TEST_F(ParseBody, SmallContentLength) {
+  std::string str;
+  str = "Content-Length: 5\r\n\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "hello";
+  parser.parse_request(str.c_str(), str.size());
+  EXPECT_EQ(parser.parse_request(str.c_str(), str.size()), kParseFinished);
+  EXPECT_EQ(parser.get_request().body, "hello");
+}
+
+// TODO: Need to implement client timeout for the case: Content-Length >
+// total body size since server will be waiting forever.
+TEST_F(ParseBody, ContentLengthBiggerThanBody) {
+  std::string str;
+  str = "Content-Length: 10\r\n\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "hello";
+  EXPECT_EQ(parser.parse_request(str.c_str(), str.size()), kParseContinue);
+  EXPECT_EQ(parser.get_request().body, "hello");
+}
+
+TEST_F(ParseBody, ContentLengthSmallerThanBody) {
+  std::string str;
+  str = "Content-Length: 2\r\n\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "hello";
+  EXPECT_EQ(parser.parse_request(str.c_str(), str.size()), kParseFinished);
+  EXPECT_EQ(parser.get_request().body, "he");
+}
+
+TEST_F(ParseBody, ContentLengthZero) {
+  std::string str;
+  str = "Content-Length: 0\r\n\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "hello";
+  EXPECT_EQ(parser.parse_request(str.c_str(), str.size()), kParseFinished);
+  EXPECT_EQ(parser.get_request().body, "");
+}
+
+TEST_F(ParseBody, NormalChunked) {
+  std::string str;
+  str = "Transfer-Encoding: chunked\r\n\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "5\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "hello\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "5\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "hello\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "0\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "\r\n";
+  EXPECT_EQ(parser.parse_request(str.c_str(), str.size()), kParseFinished);
+  EXPECT_EQ(parser.get_request().body, "hellohello");
+}
+
+TEST_F(ParseBody, ChunkedSizeNotNumber) {
+  std::string str;
+  str = "Transfer-Encoding: chunked\r\n\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "xgh\r\n";
+  ParserStatus status = parser.parse_request(str.c_str(), str.size());
+  EXPECT_EQ(status, kBadRequest);
+  EXPECT_EQ(parser.get_request().body, "");
+}
+
+TEST_F(ParseBody, ChunkedSizeOverflow) {
+  std::string str;
+  str = "Transfer-Encoding: chunked\r\n\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "429496729500\r\n";
+  ParserStatus status = parser.parse_request(str.c_str(), str.size());
+  EXPECT_EQ(status, kBadRequest);
+  EXPECT_EQ(parser.get_request().body, "");
+}
+
+TEST_F(ParseBody, ChunkedBodyNoFollowingCrlf) {
+  std::string str;
+  str = "Transfer-Encoding: chunked\r\n\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "5\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "hello";
+  parser.parse_request(str.c_str(), str.size());
+  str = "Not Crlf";
+  ParserStatus status = parser.parse_request(str.c_str(), str.size());
+  EXPECT_EQ(status, kBadRequest);
+}
+
+TEST_F(ParseBody, ChunkedBodyTooLarge) {
+  std::string str;
+  str = "Transfer-Encoding: chunked\r\n\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  while (true) {
+    str = "10\r\n";
+    if (parser.parse_request(str.c_str(), str.size()) == kContentTooLarge) {
+      SUCCEED();
+      return;
+    }
+    str = "hellohello\r\n";
+    if (parser.parse_request(str.c_str(), str.size()) == kContentTooLarge) {
+      SUCCEED();
+      return;
+    }
+  }
+  FAIL();
+}
+
+TEST_F(ParseBody, ChunkedExtensionDiscarded) {
+  std::string str;
+  str = "Transfer-Encoding: chunked\r\n\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "5;topic=teapot\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "hello\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "0\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "\r\n";
+  ParserStatus status = parser.parse_request(str.c_str(), str.size());
+  EXPECT_EQ(status, kParseFinished);
+  EXPECT_EQ(parser.get_request().body, "hello");
+}
+
+TEST_F(ParseBody, ChunkedTrailerDiscarded) {
+  std::string str;
+  str = "Transfer-Encoding: chunked\r\n\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "5\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "hello\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "0\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "topic=teapot\r\n";
+  parser.parse_request(str.c_str(), str.size());
+  str = "animal=cat\r\n";
+  EXPECT_EQ(parser.parse_request(str.c_str(), str.size()), kParseContinue);
+  str = "\r\n";
+  ParserStatus status = parser.parse_request(str.c_str(), str.size());
+  EXPECT_EQ(status, kParseFinished);
+  EXPECT_EQ(parser.get_request().body, "hello");
+}
