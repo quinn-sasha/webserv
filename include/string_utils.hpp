@@ -13,4 +13,6 @@ std::string trim(const std::string& target, std::string to_delete);
 
 int convert_to_integer(int& result, const std::string& input, int base);
 
+std::string int_to_string(int num);
+
 #endif  // INCLUDE_STRING_UTILS_HPP_

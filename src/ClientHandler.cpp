@@ -8,13 +8,19 @@
 #include <cstring>
 #include <iostream>
 
+#include "Config.hpp"
 #include "MonitoredFdHandler.hpp"
 #include "Parser.hpp"
 #include "RequestProcessor.hpp"
 
-ClientHandler::ClientHandler(int client_fd, Server& server)
+ClientHandler::ClientHandler(int client_fd, const std::string& addr,
+                             const std::string& port, Server& server,
+                             Config& config)
     : client_fd_(client_fd),
+      addr_(addr),
+      port_(port),
       server_(server),
+      config_(config),
       bytes_sent_(0),
       state_(kReceiving) {}
 

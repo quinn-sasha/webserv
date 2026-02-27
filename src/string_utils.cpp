@@ -1,5 +1,6 @@
 #include <cstddef>
 #include <list>
+#include <sstream>
 #include <string>
 
 std::string to_lower(std::string s) {
@@ -55,4 +56,10 @@ int convert_to_integer(int& result, const std::string& input, int base) {
   }
   result = static_cast<int>(tmp_res);
   return 0;
+}
+
+std::string int_to_string(int num) {
+  std::stringstream ss;
+  ss << num;
+  return ss.str();
 }
