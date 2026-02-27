@@ -18,11 +18,11 @@ AcceptHandler::AcceptHandler(int listen_fd, Server& server)
 HandlerStatus AcceptHandler::handle_input() {
   int client_fd = accept(listen_fd_, NULL, NULL);
   if (client_fd == -1) {
-    return kContinue;
+    return kHandlerContinue;
   }
   if (fcntl(client_fd, F_SETFL, O_NONBLOCK) == -1) {
-    return kFatalError;
+    return kHandlerFatalError;
   }
   server_.register_new_client(client_fd);
-  return kAccepted;
+  return kHandlerAccepted;
 }

@@ -19,7 +19,7 @@ CgiInputHandler::~CgiInputHandler() {
 }
 
 HandlerStatus CgiInputHandler::handle_input() {
-  return kContinue; //dont use
+  return kHandlerContinue;
 }
 
 HandlerStatus CgiInputHandler::handle_output() {
@@ -34,8 +34,11 @@ HandlerStatus CgiInputHandler::handle_output() {
                     body_.data() + bytes_written_,
                     body_.size() - bytes_written_);
   if (n == -1) {
-    std::cerr << "Error: write() to CGI failed: " << strerror(errno) << "\n";
-    return kFatalError;
+    // EPIPE (Broken Pipe) 等は Fatal にせず単に閉じる
+    std::cerr << "Note: write() to CGI failed (CGI likely closed stdin): " << strerror(errno) << "\n";
+    close(pipe_in_fd_);
+    pipe_in_fd_ = -1;
+    return kCgiInputDone;
   }
 
   bytes_written_ += static_cast<std::size_t>(n);
@@ -46,10 +49,13 @@ HandlerStatus CgiInputHandler::handle_output() {
     return kCgiInputDone;
   }
 
-  return kContinue;
+  return kHandlerContinue;
 }
 
 HandlerStatus CgiInputHandler::handle_poll_error() {
-  std::cerr << "Error: poll error on CGI pipe_in\n";
-  return kFatalError;
+  // pollエラー時もFatalにせず、入力を諦めて終了させる
+  std::cerr << "Note: poll error on CGI pipe_in (CGI likely closed stdin)\n";
+  close(pipe_in_fd_);
+  pipe_in_fd_ = -1;
+  return kCgiInputDone;
 }

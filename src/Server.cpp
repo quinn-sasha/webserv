@@ -12,6 +12,8 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <errno.h>
+#include <iostream>
 
 #include "AcceptHandler.hpp"
 #include "ClientHandler.hpp"
@@ -47,8 +49,8 @@ Server::~Server() {
 
 void Server::run() {
   if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
-    throw SystemError("signal()");
-  }
+    throw SystemError("signal()")
+;  }
   
   while (true) {
     if (poll_fds_.empty()) {
@@ -73,26 +75,29 @@ void Server::run() {
       
       HandlerStatus status = handle_fd_event(i);
       
-      if (status == kContinue) {
+      if (status == kHandlerContinue || status == kCgiReceived) {
         continue;
       }
 
       if (status == kCgiInputDone) {
+        // handle_fd_event 側で既に erase されているので、
+        // インデックスを調整して続行
         --i;
         continue;
       }
       
-      if (status == kFatalError) {
-        throw std::runtime_error("Fatal error on monitored fd");
+      if (status == kHandlerFatalError) {
+        std::cerr << "Fatal error occurred. Stopping server.\n";
+        return;
       }
       
-      if (status == kClosed || status == kAllSent) {
-        remove_client(i);
-        --i;
+      if (status == kHandlerClosed) {
+            remove_client(i);
+            --i;
+        }
       }
     }
   }
-}
 
 HandlerStatus Server::handle_fd_event(int pollfd_index) {
   struct pollfd& poll_fd = poll_fds_[pollfd_index];
@@ -105,16 +110,6 @@ HandlerStatus Server::handle_fd_event(int pollfd_index) {
   if (poll_fd.revents & (POLLIN | POLLHUP)) {
     HandlerStatus status = handler->handle_input();
     
-    if (status == kFatalError) {
-      return kFatalError;
-    }
-    if (status == kClosed) {
-      return kClosed;
-    }
-    if (status == kReceived) {
-      set_pollfd_out(poll_fd, poll_fd.fd);
-      return kReceived;
-    }
     if (status == kCgiReceived) {
       CgiResponseHandler* cgi_handler = static_cast<CgiResponseHandler*>(handler);
       
@@ -129,24 +124,14 @@ HandlerStatus Server::handle_fd_event(int pollfd_index) {
       
       return kCgiReceived;
     }
-    if (status == kAccepted || status == kContinue) {
-      return kContinue;
+    if (status != kHandlerContinue) {
+      return status;
     }
   }
   
   if (poll_fd.revents & POLLOUT) {
     HandlerStatus status = handler->handle_output();
     
-    if (status == kFatalError) {
-      return kFatalError;
-    }
-    if (status == kClosed) {
-      return kClosed;
-    }
-    if (status == kAllSent) {
-      return kAllSent;
-    }
-
     if (status == kCgiInputDone) {
       int fd = poll_fd.fd;
       poll_fds_.erase(poll_fds_.begin() + pollfd_index);
@@ -154,11 +139,10 @@ HandlerStatus Server::handle_fd_event(int pollfd_index) {
       delete handler;
       return kCgiInputDone;
     }
-    
-    return kContinue;
+    return status;
   }
   
-  return kContinue;
+  return kHandlerContinue;
 }
 
 void Server::remove_client(int pollfd_index) {
@@ -166,8 +150,7 @@ void Server::remove_client(int pollfd_index) {
   delete monitored_fd_to_handler_[fd];
   monitored_fd_to_handler_.erase(fd);
 
-  poll_fds_[pollfd_index] = poll_fds_.back();
-  poll_fds_.pop_back();
+  poll_fds_.erase(poll_fds_.begin() + pollfd_index);
 }
 
 void Server::register_new_client(int client_fd) {

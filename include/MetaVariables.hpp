@@ -4,7 +4,7 @@
 #include <map>
 #include <string>
 
-class HttpRequest;
+#include "Parser.hpp"
 
 class MetaVariables {
  public:
@@ -40,7 +40,7 @@ class MetaVariables {
   void set_meta(MetaVar var, const std::string& value);
   std::string get_meta(MetaVar var) const;
 
-  static MetaVariables from_request(const HttpRequest& request,
+  static MetaVariables from_request(const Request& request,
                                     const std::string& script_path);
 
   // execve 用 envp を生成・破棄

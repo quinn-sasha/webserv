@@ -10,10 +10,12 @@ OBJ_DIR  := objs
 SRCS_NO_MAIN := $(SRC_DIR)/AcceptHandler.cpp \
                 $(SRC_DIR)/ClientHandler.cpp \
                 $(SRC_DIR)/ListenSocket.cpp \
+                $(SRC_DIR)/Parser.cpp \
+                $(SRC_DIR)/RequestProcessor.cpp \
+                $(SRC_DIR)/Response.cpp \
                 $(SRC_DIR)/Server.cpp \
                 $(SRC_DIR)/pollfd_utils.cpp \
-				$(SRC_DIR)/HttpRequest.cpp \
-				$(SRC_DIR)/HttpResponse.cpp \
+                $(SRC_DIR)/string_utils.cpp \
                 $(SRC_DIR)/CgiHandler.cpp \
 				$(SRC_DIR)/MetaVariables.cpp \
 				$(SRC_DIR)/CgiInputHandler.cpp \

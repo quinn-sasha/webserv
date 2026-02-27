@@ -9,7 +9,8 @@
 #include <iostream>
 
 #include "MonitoredFdHandler.hpp"
-#include "HttpResponse.hpp"
+#include "Parser.hpp"
+#include "RequestProcessor.hpp"
 #include "CgiHandler.hpp"
 #include "CgiResponseHandler.hpp"
 #include "Server.hpp"
@@ -19,7 +20,7 @@ ClientHandler::ClientHandler(int client_fd, Server& server)
     : client_fd_(client_fd),
       server_(server),
       bytes_sent_(0),
-      cgi_mode_(false) {}
+      state_(kReceiving) {}
 
 ClientHandler::~ClientHandler() {
   if (client_fd_ != -1 && close(client_fd_) == -1) {
@@ -28,102 +29,72 @@ ClientHandler::~ClientHandler() {
 }
 
 HandlerStatus ClientHandler::handle_input() {
-  ssize_t num_read = recv(client_fd_, recv_buffer_, buf_size, 0);
-  
-  if (num_read <= 0) {
-    return kClosed;
+  ssize_t num_read = recv(client_fd_, buffer_, buf_size, 0);
+  if (num_read == -1) {
+    return kHandlerClosed;
+  }
+  if (num_read == 0) {  // Connection closed
+    return kHandlerClosed;
   }
 
-  HttpRequest::ParseResult result = request_.parse(recv_buffer_, num_read);
-  
-  if (result == HttpRequest::kError) {
-    HttpResponse response;
-    response.set_status(400, "Bad Request");
-    response.set_body("<h1>400 Bad Request</h1>");
-    send_buffer_ = response.to_string();
-    bytes_sent_ = 0;
-    return kReceived;
+  ParserStatus status = parser_.parse_request(buffer_, num_read);
+  if (status == kParseContinue) {
+    return kHandlerContinue;
   }
-  
-  if (result == HttpRequest::kIncomplete) {
-    return kContinue;
+
+  // kParseFinished or some error status
+  ProcesseorResult result = RequestProcessor::process(status, parser_.get_request());
+
+  if (result.next_action == ProcesseorResult::kExecuteCgi) {
+    state_ = kExecutingCgi;
+    
+    CgiHandler cgi(parser_.get_request());
+    if (cgi.execute_cgi(result.script_path) == -1) {
+      // Failed to execute CGI, send 500
+      response_.prepare_error_response(kInternalServerError); 
+      response_str_ = response_.serialize();
+      state_ = kSendingResponse;
+      return kHandlerReceived;
+    }
+
+    server_.register_cgi_fd(cgi.get_pipe_in_fd(), cgi.get_pipe_out_fd(), 
+                                cgi.get_cgi_pid(),
+                                parser_.get_request().body, client_fd_);
+
+    // This ClientHandler is no longer needed as CGI handlers will take over
+    client_fd_ = -1;
+    return kHandlerClosed;
   }
-  
-  // std::cout << "Method: " << request_.method() << "\n";
-  // std::cout << "Path: " << request_.path() << "\n";
-  // std::cout << "Query: " << request_.query_string() << "\n";  // デバッグ用
-  
-  generate_response();
-  
-  // CGIモードの場合はこのハンドラを削除
-  if (cgi_mode_) {
-    return kClosed;
-  }
-  
-  return kReceived;
+
+  // Normal response
+  state_ = kSendingResponse;
+  response_ = result.response; // Maybe this copy is too heavy 
+  response_str_ = response_.serialize();
+  bytes_sent_ = 0;
+  return kHandlerReceived;
 }
 
 HandlerStatus ClientHandler::handle_output() {
-  if (send_buffer_.empty()) {
-    std::cerr << "Error: handle_output() called but no data to send\n";
-    return kClosed;
+  if (state_ == kExecutingCgi) {
+    return kHandlerContinue;
   }
-  
-  ssize_t remaining = send_buffer_.size() - bytes_sent_;
-  ssize_t num_sent = send(client_fd_, send_buffer_.data() + bytes_sent_, 
-                          remaining, 0);
+  if (state_ != kSendingResponse) {
+    return kHandlerContinue;
+  }
+
+  ssize_t remaining = response_str_.size() - bytes_sent_;
+  ssize_t num_sent = 
+      send(client_fd_, response_str_.data() + bytes_sent_, remaining, 0);
   
   if (num_sent == -1) {
-    return kClosed;
+    return kHandlerClosed;
   }
   
   bytes_sent_ += num_sent;
   
-  if (bytes_sent_ < static_cast<ssize_t>(send_buffer_.size())) {
-    return kContinue;
+  if (bytes_sent_ < response_str_.size()) {
+    return kHandlerContinue;
   }
   
-  return kAllSent;
-}
-
-void ClientHandler::generate_response() {
-  HttpResponse response;
-
-  if (request_.path() == "/") {
-    response.set_status(200, "OK");
-    response.add_header("Content-Type", "text/html");
-    response.set_body("<h1>Hello, World!</h1>");
-    send_buffer_ = response.to_string();
-    bytes_sent_ = 0;
-  } else if (request_.is_cgi()) {
-    CgiHandler cgi(request_);
-    std::string script_path = request_.path().substr(1);
-
-    //std::cout << "Starting CGI : " << script_path << "\n";
-
-    pid_t cgi_pid;
-    int pipe_out_fd;
-    int pipe_in_fd = cgi.execute_cgi(script_path, cgi_pid, pipe_out_fd);
-
-    if (pipe_in_fd == -1) {
-      response.set_status(500, "Internal Server Error");
-      response.add_header("Content-Type", "text/html");
-      response.set_body("<h1>500 Internal Server Error</h1>");
-      send_buffer_ = response.to_string();
-      bytes_sent_ = 0;
-      return;
-    }
-
-    server_.register_cgi_fd(pipe_in_fd, pipe_out_fd, cgi_pid,
-                                request_.body(), client_fd_);
-
-    client_fd_ = -1;
-    cgi_mode_ = true;
-  } else {
-    response.set_status(404, "Not Found");
-    response.add_header("Content-Type", "text/html");
-    response.set_body("<h1>404 Not Found</h1>");
-    send_buffer_ = response.to_string();
-    bytes_sent_ = 0;
-  }
+  return kHandlerSent;
 }

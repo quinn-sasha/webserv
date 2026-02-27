@@ -48,7 +48,7 @@ HandlerStatus CgiResponseHandler::handle_input() {
   ssize_t n = read(cgi_fd_, buffer, sizeof(buffer));
   
   if (n == -1) {
-    return kClosed;
+    return kHandlerClosed;
   }
   
   if (n == 0) {
@@ -80,7 +80,7 @@ HandlerStatus CgiResponseHandler::handle_input() {
   }
   
   cgi_output_.append(buffer, n);
-  return kContinue;
+  return kHandlerContinue;
 }
 
 HandlerStatus CgiResponseHandler::handle_output() {
@@ -90,7 +90,7 @@ HandlerStatus CgiResponseHandler::handle_output() {
   }
   
   if (send_buffer_.empty()) {
-    return kClosed;
+    return kHandlerClosed;
   }
   
   ssize_t remaining = send_buffer_.size() - bytes_sent_;
@@ -98,21 +98,21 @@ HandlerStatus CgiResponseHandler::handle_output() {
                    remaining, 0);
   
   if (n == -1) {
-    return kClosed;
+    return kHandlerClosed;
   }
   
   bytes_sent_ += n;
   
   if (bytes_sent_ < static_cast<ssize_t>(send_buffer_.size())) {
-    return kContinue;
+    return kHandlerContinue;
   }
   
-  return kAllSent;
+  return kHandlerSent;
 }
 
 HandlerStatus CgiResponseHandler::handle_poll_error() {
   std::cerr << "Error: poll error on CGI fd\n";
-  return kClosed;
+  return kHandlerClosed;
 }
 
 static std::string key_to_lower(const std::string& str) {
@@ -199,9 +199,6 @@ std::string CgiResponseHandler::parse_cgi_output(const std::string& cgi_output) 
   // 保存したヘッダーを出力
   for (std::map<std::string, std::string>::iterator it = headers_map.begin(); 
        it != headers_map.end(); ++it) {
-    // mapのキーは小文字なので、出力時は適切な形式にする必要があるが
-    // ここでは簡易的に元のキーを復元せず、一般的な形式で出力する
-    // (本来は元のキーを保存しておくのが理想)
     std::string key = it->first;
     // 先頭とハイフンの後を大文字にする簡易的な整形
     if (!key.empty()) {

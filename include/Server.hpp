@@ -4,6 +4,7 @@
 #include <map>
 #include <string>
 #include <vector>
+#include <poll.h>
 
 #include "ListenSocket.hpp"
 #include "MonitoredFdHandler.hpp"

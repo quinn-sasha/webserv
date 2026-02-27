@@ -5,8 +5,6 @@
 #include <cstring>
 #include <sstream>
 
-#include "HttpRequest.hpp"
-
 MetaVariables::MetaVariables() {}
 MetaVariables::~MetaVariables() {}
 
@@ -108,43 +106,59 @@ static std::string to_upper_http_env_key(const std::string& header_key) {
   return out;
 }
 
-MetaVariables MetaVariables::from_request(const HttpRequest& request,
+static std::string method_to_str(HttpMethod method) {
+  switch (method) {
+    case kGet:    return "GET";
+    case kPost:   return "POST";
+    case kDelete: return "DELETE";
+    default:      return "UNKNOWN";
+  }
+}
+
+MetaVariables MetaVariables::from_request(const Request& request,
                                           const std::string& script_path) {
   MetaVariables env;
 
-  env.set_meta(CgiRequestMethod, request.method());
+  env.set_meta(CgiRequestMethod, method_to_str(request.method));
 
-  env.set_meta(CgiScriptName, request.path());
-  env.set_meta(CgiPathInfo, request.path());
+  // target = path [ "?" query ]
+  std::string path = request.target;
+  std::string query = "";
+  std::size_t q_pos = path.find('?');
+  if (q_pos != std::string::npos) {
+    query = path.substr(q_pos + 1);
+    path = path.substr(0, q_pos);
+  }
 
-  env.set_meta(CgiQueryString, request.query_string());
+  env.set_meta(CgiScriptName, path);
+  env.set_meta(CgiPathInfo, path);
+
+  env.set_meta(CgiQueryString, query);
   env.set_meta(CgiServerProtocol, "HTTP/1.1");
   env.set_meta(CgiGatewayInterface, "CGI/1.1");
   env.set_meta(CgiScriptFilename, script_path);
 
   // Content-* は CGI では特別扱い
-  {
-    const std::string& content_type = request.header("Content-Type");
-    if (!content_type.empty()) env.set_meta(CgiContentType, content_type);
+  if (request.headers.count("content-type")) {
+    env.set_meta(CgiContentType, request.headers.at("content-type"));
   }
+  
   {
     std::ostringstream oss;
-    oss << request.body().size();
+    oss << request.body.size();
     env.set_meta(CgiContentLength, oss.str());
   }
 
-  //  : HTTPヘッダを CGI の HTTP_* へ変換して渡す
-  //　 例: Host -> HTTP_HOST, User-Agent -> HTTP_USER_AGENT
-  const std::map<std::string, std::string>& hs = request.headers();
-  for (std::map<std::string, std::string>::const_iterator it = hs.begin();
-       it != hs.end(); ++it) {
+  // HTTPヘッダを CGI の HTTP_* へ変換して渡す
+  for (std::map<std::string, std::string>::const_iterator it = request.headers.begin();
+       it != request.headers.end(); ++it) {
     const std::string& k = it->first;
     const std::string& v = it->second;
 
     if (k.empty()) continue;
 
     // CGIでは CONTENT_TYPE/CONTENT_LENGTH を使うので HTTP_ 版には入れない
-    if (k == "Content-Type" || k == "Content-Length") continue;
+    if (k == "content-type" || k == "content-length") continue;
 
     env.set_raw(to_upper_http_env_key(k), v);
   }

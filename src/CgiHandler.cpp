@@ -15,8 +15,14 @@
 #include "CgiResponseHandler.hpp"
 #include "pollfd_utils.hpp"
 
-CgiHandler::CgiHandler(const HttpRequest& request) 
-    : request_(request) {}
+CgiHandler::CgiHandler(const Request& request) 
+    : request_(request),
+      pipe_in_fd_(-1),
+      pipe_out_fd_(-1),
+      cgi_pid_(-1) {}
+
+CgiHandler::~CgiHandler() {
+}
 
 static std::string get_interpreter_from_shebang(const std::string& script_path) {
   std::ifstream ifs(script_path.c_str());
@@ -39,8 +45,7 @@ static std::string get_interpreter_from_shebang(const std::string& script_path) 
 
 static std::vector<std::string> get_interpreter(const std::string& script_path) {
   std::vector<std::string> args;
-
-  // まずshebangを確認
+  // まず shebang で確認
   std::string shebang = get_interpreter_from_shebang(script_path);
   if (!shebang.empty()) {
     std::istringstream iss(shebang);
@@ -51,8 +56,7 @@ static std::vector<std::string> get_interpreter(const std::string& script_path) 
     args.push_back(script_path);
     return args;
   }
-
-  // 次に拡張子で判断
+  // 次に 拡張子
   std::size_t dot = script_path.rfind('.');
   if (dot != std::string::npos) {
     std::string ext = script_path.substr(dot);
@@ -70,9 +74,7 @@ static std::vector<std::string> get_interpreter(const std::string& script_path) 
   return args;
 }
 
-int CgiHandler::execute_cgi(const std::string& script_path, 
-                               pid_t& out_pid,
-                               int& out_pipe_out_fd) {  
+int CgiHandler::execute_cgi(const std::string& script_path) {  
   int pipe_in[2];
   int pipe_out[2];
 
@@ -81,16 +83,16 @@ int CgiHandler::execute_cgi(const std::string& script_path,
     return -1;
   }
 
-  pid_t pid = fork();
+  cgi_pid_ = fork();
 
-  if (pid == -1) {
+  if (cgi_pid_ == -1) {
     std::cerr << "Error: fork() failed: " << strerror(errno) << "\n";
     close(pipe_in[0]);  close(pipe_in[1]);
     close(pipe_out[0]); close(pipe_out[1]);
     return -1;
   }
 
-  if (pid == 0) {
+  if (cgi_pid_ == 0) {
     close(pipe_in[1]);
     if (dup2(pipe_in[0], STDIN_FILENO) == -1) {
       std::cerr << "Error: dup2(stdin) failed: " << strerror(errno) << "\n";
@@ -135,16 +137,14 @@ int CgiHandler::execute_cgi(const std::string& script_path,
   close(pipe_in[0]);
   close(pipe_out[1]);
 
-  // pipe_in をノンブロッキング（write側）
+  // ノンブロッキング設定
   int flags = fcntl(pipe_in[1], F_GETFL, 0);
   fcntl(pipe_in[1], F_SETFL, flags | O_NONBLOCK);
-
-  // pipe_out をノンブロッキング（read側）
   flags = fcntl(pipe_out[0], F_GETFL, 0);
   fcntl(pipe_out[0], F_SETFL, flags | O_NONBLOCK);
 
-  // ✅ write() はしない（pollに任せる）
-  out_pid = pid;
-  out_pipe_out_fd = pipe_out[0];
-  return pipe_in[1];
+  pipe_in_fd_ = pipe_in[1];
+  pipe_out_fd_ = pipe_out[0];
+  
+  return 0; // 成功
 }
