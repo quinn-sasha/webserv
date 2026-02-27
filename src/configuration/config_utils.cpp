@@ -4,7 +4,7 @@
 #include <sstream>
 
 void error_exit(const std::string& msg) {
-  std::cerr << "Error: Config file: " << msg << std::endl;
+  std::cerr << "Error: " << msg << std::endl;
   std::exit(EXIT_FAILURE);
 }
 
