@@ -58,6 +58,14 @@ ParserStatus Parser::parse_method_name(const std::string& method) {
     request_.method = kGet;
     return kParseContinue;
   }
+  if (method == "POST") {
+    request_.method = kPost;
+    return kParseContinue;
+  }
+  if (method == "DELETE") {
+    request_.method = kDelete;
+    return kParseContinue;
+  }
   return kNotImplemented;
 }
 

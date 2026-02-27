@@ -1,4 +1,6 @@
 #include "Server.hpp"
+#include "CgiInputHandler.hpp"   
+#include "CgiResponseHandler.hpp"
 
 #include <fcntl.h>
 #include <poll.h>
@@ -11,6 +13,8 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <errno.h>
+#include <iostream>
 
 #include "AcceptHandler.hpp"
 #include "ClientHandler.hpp"
@@ -47,54 +51,78 @@ Server::~Server() {
   std::map<int, MonitoredFdHandler*>::iterator iter;
   for (iter = monitored_fd_to_handler_.begin();
        iter != monitored_fd_to_handler_.end(); iter++) {
-    delete iter->second;  // Close every fd except listen socket
+    delete iter->second;
   }
 }
 
-// accept(), send(), recv() という異なるシステムコールに対して
-// ソケットを監視しなければいけない.
-// 監視するソケットの種類はListen socket, accepted socket.
 void Server::run() {
   if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
-    throw SystemError("signal()");
-  }
+    throw SystemError("signal()")
+;  }
+  
   while (true) {
     if (poll_fds_.empty()) {
       throw std::runtime_error("Error: poll_fds_ must not be empty");
     }
-    // CAUTION: temporary block infinitely (temporal)
-    if (poll(&poll_fds_.front(), poll_fds_.size(), -1) == -1) {
-      throw SystemError("poll()");
+    
+    if (poll(&poll_fds_[0], poll_fds_.size(), -1) == -1) {
+      throw SystemError("poll");
     }
-    for (std::size_t i = 0; i < poll_fds_.size(); i++) {
-      HandlerStatus status = handle_fd_event(i);
-      if (status == kHandlerContinue) {
+    
+    for (std::size_t i = 0; i < poll_fds_.size(); ++i) {
+      if (poll_fds_[i].revents == 0) {
         continue;
       }
-      if (status == kHandlerFatalError) {
-        throw std::runtime_error("Fatal error on monitored fd");
+      
+      HandlerStatus status = handle_fd_event(i);
+      
+      if (status == kHandlerContinue || status == kCgiReceived) {
+        continue;
       }
+
+      if (status == kCgiInputDone) {
+        --i;
+        continue;
+      }
+      
+      if (status == kHandlerFatalError) {
+        std::cerr << "Fatal error occurred. Stopping server.\n";
+        return;
+      }
+      
       if (status == kHandlerClosed) {
-        remove_client(i);
-        i--;
+            remove_client(i);
+            --i;
+        }
       }
     }
   }
-}
 
-// Returns kFatalError, kClosed or kContinue
 HandlerStatus Server::handle_fd_event(int pollfd_index) {
   struct pollfd& poll_fd = poll_fds_[pollfd_index];
   MonitoredFdHandler* handler = monitored_fd_to_handler_[poll_fd.fd];
-
-  if (poll_fd.revents & (POLLERR | POLLHUP | POLLNVAL)) {
+  
+  if (poll_fd.revents & (POLLERR | POLLNVAL)) {
     return handler->handle_poll_error();
   }
-  if (!(poll_fd.revents & POLLIN) && !(poll_fd.revents & POLLOUT)) {
-    return kHandlerContinue;
-  }
-  if (poll_fd.revents & POLLIN) {
+  
+  if (poll_fd.revents & (POLLIN | POLLHUP)) {
     HandlerStatus status = handler->handle_input();
+    
+    if (status == kCgiReceived) {
+      CgiResponseHandler* cgi_handler = static_cast<CgiResponseHandler*>(handler);
+      
+      int old_fd = poll_fd.fd;
+      int new_fd = cgi_handler->get_client_fd();
+      
+      poll_fd.fd = new_fd;
+      set_pollfd_out(poll_fd, new_fd);
+      
+      monitored_fd_to_handler_.erase(old_fd);
+      monitored_fd_to_handler_.insert(std::make_pair(new_fd, handler));
+      
+      return kCgiReceived;
+    }
     if (status == kHandlerFatalError) {
       return kHandlerFatalError;
     }
@@ -104,30 +132,39 @@ HandlerStatus Server::handle_fd_event(int pollfd_index) {
     if (status == kHandlerAccepted || status == kHandlerContinue) {
       return kHandlerContinue;
     }
-    if (status == kHandlerReceived) {
+    if(status == kHandlerReceived) {
       set_pollfd_out(poll_fd, poll_fd.fd);
     }
   }
   HandlerStatus status = handler->handle_output();
+    if (status == kCgiInputDone) {
+      int fd = poll_fd.fd;
+      poll_fds_.erase(poll_fds_.begin() + pollfd_index);
+      monitored_fd_to_handler_.erase(fd);
+      delete handler;
+      return kCgiInputDone;
+    }
+
   if (status == kHandlerFatalError) {
     return kHandlerFatalError;
   }
   if (status == kHandlerClosed) {
     return kHandlerClosed;
   }
+  
   if (status == kHandlerSent) {
     return kHandlerClosed;  // TODO: implement keep-alive (optional)
   }
+
   return kHandlerContinue;
 }
 
 void Server::remove_client(int pollfd_index) {
   int fd = poll_fds_[pollfd_index].fd;
-  delete monitored_fd_to_handler_[fd];  // close(fd)
+  delete monitored_fd_to_handler_[fd]; // close(fd)
   monitored_fd_to_handler_.erase(fd);
 
-  poll_fds_[pollfd_index] = poll_fds_.back();
-  poll_fds_.pop_back();
+  poll_fds_.erase(poll_fds_.begin() + pollfd_index);
 }
 
 void Server::register_new_client(int client_fd, const std::string& addr,
@@ -138,4 +175,23 @@ void Server::register_new_client(int client_fd, const std::string& addr,
   MonitoredFdHandler* handler =
       new ClientHandler(client_fd, addr, port, *this, config_);
   monitored_fd_to_handler_.insert(std::make_pair(client_fd, handler));
+}
+
+void Server::register_cgi_fd(int pipe_in_fd, int pipe_out_fd,
+                                 pid_t cgi_pid, const std::string& body,
+                                 int client_fd) {
+  {
+    struct pollfd tmp;
+    set_pollfd_out(tmp, pipe_in_fd);
+    poll_fds_.push_back(tmp);
+    monitored_fd_to_handler_.insert(std::make_pair(pipe_in_fd,
+        new CgiInputHandler(pipe_in_fd, cgi_pid, body)));
+  }
+  {
+    struct pollfd tmp;
+    set_pollfd_in(tmp, pipe_out_fd);
+    poll_fds_.push_back(tmp);
+    monitored_fd_to_handler_.insert(std::make_pair(pipe_out_fd,
+        new CgiResponseHandler(pipe_out_fd, client_fd, cgi_pid)));
+  }
 }

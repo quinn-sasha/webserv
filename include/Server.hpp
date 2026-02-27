@@ -1,11 +1,10 @@
 #ifndef INCLUDE_SERVER_HPP_
 #define INCLUDE_SERVER_HPP_
 
-#include <poll.h>
-
-#include <cstddef>
 #include <map>
+#include <string>
 #include <vector>
+#include <poll.h>
 
 #include "Config.hpp"
 #include "ListenSocket.hpp"
@@ -23,6 +22,9 @@ class Server {
   ~Server();
   void run();
   HandlerStatus handle_fd_event(int pollfd_index);
+  void register_cgi_fd(int pipe_in_fd, int pipe_out_fd,
+                           pid_t cgi_pid, const std::string& body,
+                           int client_fd);
   void register_new_client(int client_fd, const std::string& addr,
                            const std::string& port);
   void remove_client(int pollfd_index);

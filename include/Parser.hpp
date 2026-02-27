@@ -14,6 +14,7 @@ enum ParserStatus {
   kMethodNotAllowed,
   kContentTooLarge,
   kRequestHeaderFieldsTooLarge,
+  kInternalServerError,
   // Custom status used in Parser class
   kParseContinue,
   kParseFinished,

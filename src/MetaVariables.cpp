@@ -1,0 +1,164 @@
+#include "MetaVariables.hpp"
+
+#include <algorithm>
+#include <cctype>
+#include <cstring>
+#include <sstream>
+#include <vector>
+
+MetaVariables::MetaVariables() {}
+MetaVariables::~MetaVariables() {}
+
+MetaVariables::MetaVariables(const MetaVariables& other)
+    : script_filename_(other.script_filename_),
+      request_method_(other.request_method_),
+      query_string_(other.query_string_),
+      content_length_(other.content_length_),
+      content_type_(other.content_type_),
+      meta_variables_(other.meta_variables_),
+      http_headers_(other.http_headers_) {}
+
+MetaVariables& MetaVariables::operator=(const MetaVariables& other) {
+  if (this != &other) {
+    script_filename_ = other.script_filename_;
+    request_method_ = other.request_method_;
+    query_string_ = other.query_string_;
+    content_length_ = other.content_length_;
+    content_type_ = other.content_type_;
+    meta_variables_ = other.meta_variables_;
+    http_headers_ = other.http_headers_;
+  }
+  return *this;
+}
+
+static std::string to_upper_http_env_key(const std::string& header_key) {
+  // "User-Agent" -> "HTTP_USER_AGENT"
+  std::string out = "HTTP_";
+  for (std::size_t i = 0; i < header_key.size(); ++i) {
+    unsigned char c = static_cast<unsigned char>(header_key[i]);
+    if (c == '-')
+      out.push_back('_');
+    else
+      out.push_back(static_cast<char>(std::toupper(c)));
+  }
+  return out;
+}
+
+static std::string method_to_str(HttpMethod method) {
+  switch (method) {
+    case kGet:
+      return "GET";
+    case kPost:
+      return "POST";
+    case kDelete:
+      return "DELETE";
+    default:
+      return "UNKNOWN";
+  }
+}
+
+MetaVariables MetaVariables::from_request(const Request& request,
+                                          const std::string& script_path) {
+  MetaVariables env;
+
+  // --- ① Special Variables (Core Identity) ---
+  env.request_method_ = method_to_str(request.method);
+  env.script_filename_ = script_path;
+
+  // target = path [ "?" query ]
+  std::string path = request.target;
+  std::size_t q_pos = path.find('?');
+  if (q_pos != std::string::npos) {
+    env.query_string_ = path.substr(q_pos + 1);
+    path = path.substr(0, q_pos);
+  } else {
+    env.query_string_ = "";
+  }
+
+  if (request.headers.count("content-type")) {
+    env.content_type_ = request.headers.at("content-type");
+  }
+
+  {
+    std::ostringstream oss;
+    oss << request.body.size();
+    env.content_length_ = oss.str();
+  }
+
+  // --- ② Meta Variables (CGI Standard) ---
+  env.meta_variables_["SCRIPT_NAME"] = path;
+  env.meta_variables_["PATH_INFO"] = path;
+  env.meta_variables_["SERVER_PROTOCOL"] = "HTTP/1.1";
+  env.meta_variables_["GATEWAY_INTERFACE"] = "CGI/1.1";
+  env.meta_variables_["SERVER_SOFTWARE"] = "webserv/1.0";
+
+  // These could be set from some server config/client info
+  env.meta_variables_["SERVER_NAME"] = "localhost"; // TODO set correct server name
+  env.meta_variables_["SERVER_PORT"] = "8888"; // TODO set correct server port
+  // env.meta_variables_["REMOTE_ADDR"] = "...";
+
+  // --- ③ HTTP Headers (Map, prefixed with HTTP_) ---
+  for (std::map<std::string, std::string>::const_iterator it =
+           request.headers.begin();
+       it != request.headers.end(); ++it) {
+    const std::string& key = it->first;
+    const std::string& val = it->second;
+
+    if (key.empty()) continue;
+
+    // CGI では CONTENT_TYPE/CONTENT_LENGTH は特殊扱いのため除外
+    if (key == "content-type" || key == "content-length") continue;
+
+    env.http_headers_[to_upper_http_env_key(key)] = val;
+  }
+
+  return env;
+}
+
+void MetaVariables::add_to_list(std::vector<std::string>& list,
+                                const std::string& key,
+                                const std::string& value) const {
+  if (!value.empty() || key == "QUERY_STRING" || key == "CONTENT_LENGTH") {
+    list.push_back(key + "=" + value);
+  }
+}
+
+char** MetaVariables::build_envp() const {
+  std::vector<std::string> env_list;
+
+  // --- Add Special Variables ---
+  add_to_list(env_list, "REQUEST_METHOD", request_method_);
+  add_to_list(env_list, "SCRIPT_FILENAME", script_filename_);
+  add_to_list(env_list, "QUERY_STRING", query_string_);
+  add_to_list(env_list, "CONTENT_LENGTH", content_length_);
+  add_to_list(env_list, "CONTENT_TYPE", content_type_);
+
+  // --- Add Meta Variables ---
+  for (std::map<std::string, std::string>::const_iterator it = meta_variables_.begin();
+       it != meta_variables_.end(); ++it) {
+    add_to_list(env_list, it->first, it->second);
+  }
+
+  // --- Add HTTP Headers ---
+  for (std::map<std::string, std::string>::const_iterator it =
+           http_headers_.begin();
+       it != http_headers_.end(); ++it) {
+    add_to_list(env_list, it->first, it->second);
+  }
+
+  char** envp = new char*[env_list.size() + 1];
+  for (std::size_t i = 0; i < env_list.size(); ++i) {
+    envp[i] = new char[env_list[i].size() + 1];
+    std::strcpy(envp[i], env_list[i].c_str());
+  }
+  envp[env_list.size()] = NULL;
+  return envp;
+}
+
+void MetaVariables::destroy_envp(char** envp) {
+  if (!envp) return;
+  for (std::size_t i = 0; envp[i] != NULL; ++i) {
+    delete[] envp[i];
+  }
+  delete[] envp;
+}

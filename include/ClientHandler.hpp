@@ -2,7 +2,6 @@
 #define INCLUDE_CLIENTHANDLER_HPP_
 
 #include <sys/socket.h>
-
 #include <cstddef>
 #include <string>
 
@@ -33,12 +32,9 @@ class ClientHandler : public MonitoredFdHandler {
   };
   State state_;
 
-  // Helpers
-  void set_response(ParserStatus status);
-
   ClientHandler(const ClientHandler& other);
-  ClientHandler operator=(const ClientHandler& other);
-
+  ClientHandler& operator=(const ClientHandler& other);
+  
  public:
   ClientHandler(int client_fd, const std::string& addr, const std::string& port,
                 Server& server, Config& config);

@@ -2,15 +2,17 @@
 #define INCLUDE_MONITOREDFDHANDLER_HPP_
 
 enum HandlerStatus {
-  kHandlerContinue,    // ClientHandler, AcceptHandler
-  kHandlerReceived,    // ClientHandler
-  kHandlerSent,        // ClientHandler
-  kHandlerAccepted,    // AcceptHandler
-  kHandlerClosed,      // ClientHandler
+  kHandlerContinue,    // ClientHandler, AcceptHandler                                                                                                 │
+  kHandlerReceived,    // ClientHandler                                                                                                                │
+  kHandlerSent,        // ClientHandler                                                                                                                │
+  kHandlerAccepted,    // AcceptHandler                                                                                                                │
+  kHandlerClosed,      // ClientHandler                                                                                                                │
   kHandlerFatalError,  // AcceptHandler, ClientHandler
+  kCgiReceived,        // cgi
+  kCgiInputDone        // cgi
 };
-// If we got kFatalError, Server should be stopped
 
+// If we got kFatalError, Server should be stopped   
 class MonitoredFdHandler {
  public:
   virtual ~MonitoredFdHandler() {}
