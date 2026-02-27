@@ -96,14 +96,12 @@ static void finalize_server_context(ServerContext& sc) {
   }
 }
 
-void Config::parse_server(const std::vector<std::string>& tokens, size_t i) {
-  if (i >= tokens.size() || tokens[i++] != "{") {
+void Config::parse_server(const std::vector<std::string>& tokens,
+                          size_t token_index) {
+  if (token_index >= tokens.size() || tokens[token_index++] != "{") {
     error_exit("Expected '{' after server");
   }
-
-  ServerContext sc;
   static std::map<std::string, ServerParser> s_parsers;
-
   if (s_parsers.empty()) {
     s_parsers["listen"] = parse_listen_directive;
     s_parsers["server_name"] = parse_server_name_directive;
@@ -113,22 +111,21 @@ void Config::parse_server(const std::vector<std::string>& tokens, size_t i) {
     s_parsers["location"] = parse_location_directive;
     s_parsers["error_page"] = parse_error_page_directive;
   }
-
-  while (i < tokens.size() && tokens[i] != "}") {
-    std::string key = tokens[i++];
-    if (s_parsers.count(key)) {
-      s_parsers[key](tokens, i, sc);
-    } else {
+  ServerContext sc;
+  while (token_index < tokens.size()) {
+    if (tokens[token_index] == "}") {
+      finalize_server_context(sc);
+      servers_.push_back(sc);
+      return;
+    }
+    std::string key = tokens[token_index];
+    if (s_parsers.find(key) == s_parsers.end()) {
       error_exit("Unknown directive: " + key);
     }
+    s_parsers[key](tokens, token_index, sc);
+    token_index++;
   }
-
-  if (i >= tokens.size() || tokens[i++] != "}") {
-    error_exit("Unexpected end of file: missing '}' in server block");
-  }
-
-  finalize_server_context(sc);
-  servers_.push_back(sc);
+  error_exit("Unexpected end of file: missing '}' in server block");
 }
 
 const ServerContext& Config::get_config(int port,
