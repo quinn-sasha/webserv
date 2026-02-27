@@ -20,7 +20,6 @@ std::string Config::read_file(const std::string& filepath) {
 std::vector<std::string> Config::tokenize(const std::string& content) {
   std::vector<std::string> tokens;
   std::string current_word;
-
   for (size_t i = 0; i < content.size(); ++i) {
     char c = content[i];
     if (c == '#') {
@@ -46,11 +45,11 @@ std::vector<std::string> Config::tokenize(const std::string& content) {
       }
       tokens.push_back(std::string(1, c));
     } else {
-      current_word += c;
+      current_word.append(1, c);
     }
-    if (!current_word.empty()) {
-      tokens.push_back(current_word);
-    }
+  }
+  if (!current_word.empty()) {
+    tokens.push_back(current_word);
   }
   return tokens;
 }
@@ -97,7 +96,7 @@ static void finalize_server_context(ServerContext& sc) {
   }
 }
 
-void Config::parse_server(std::vector<std::string>& tokens, size_t& i) {
+void Config::parse_server(const std::vector<std::string>& tokens, size_t i) {
   if (i >= tokens.size() || tokens[i++] != "{") {
     error_exit("Expected '{' after server");
   }

@@ -50,27 +50,28 @@ long safe_strtol(const std::string& str, long min_val, long max_val) {
   return val;
 }
 
-void set_single_string(std::vector<std::string>& tokens, size_t& i,
-                       std::string& field, const std::string& directive_name) {
-  if (i >= tokens.size() || tokens[i] == ";")
+void set_single_string(const std::vector<std::string>& tokens,
+                       size_t token_index, std::string& field,
+                       const std::string& directive_name) {
+  if (token_index >= tokens.size() || tokens[token_index] == ";")
     error_exit(directive_name + " needs a value");
 
-  field = tokens[i++];
+  field = tokens[token_index++];
 
-  if (i >= tokens.size() || tokens[i++] != ";")
+  if (token_index >= tokens.size() || tokens[token_index++] != ";")
     error_exit(directive_name + ": expected ';'");
 }
 
-void set_vector_string(std::vector<std::string>& tokens, size_t& i,
-                       std::vector<std::string>& field,
+void set_vector_string(const std::vector<std::string>& tokens,
+                       size_t token_index, std::vector<std::string>& field,
                        const std::string& directive_name) {
-  if (i >= tokens.size() || tokens[i] == ";")
+  if (token_index >= tokens.size() || tokens[token_index] == ";")
     error_exit(directive_name + " needs a value");
 
-  while (i < tokens.size() || tokens[i++] != ";") {
-    field.push_back(tokens[i++]);
+  while (token_index < tokens.size() || tokens[token_index++] != ";") {
+    field.push_back(tokens[token_index++]);
   }
 
-  if (i >= tokens.size() || tokens[i++] != ";")
+  if (token_index >= tokens.size() || tokens[token_index++] != ";")
     error_exit(directive_name + ": expected ';'");
 }

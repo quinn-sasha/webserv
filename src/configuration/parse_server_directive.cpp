@@ -14,14 +14,14 @@
 #include "config_utils.hpp"
 #include "parse_location_directive.hpp"
 
-void parse_listen_directive(std::vector<std::string>& tokens, size_t& i,
-                            ServerContext& sc) {
-  if (i >= tokens.size() || tokens[i] == ";") {
+void parse_listen_directive(const std::vector<std::string>& tokens,
+                            size_t token_index, ServerContext& sc) {
+  if (token_index >= tokens.size() || tokens[token_index] == ";") {
     error_exit("Empty listen");
   }
 
   ListenConfig lc;
-  std::string val = tokens[i];
+  std::string val = tokens[token_index];
   size_t colon_pos = val.find(':');
 
   if (colon_pos != std::string::npos) {
@@ -41,95 +41,96 @@ void parse_listen_directive(std::vector<std::string>& tokens, size_t& i,
     }
 
     sc.listens.push_back(lc);
-    i++;
+    token_index++;
 
-    if (i >= tokens.size() || tokens[i++] != ";") {
+    if (token_index >= tokens.size() || tokens[token_index++] != ";") {
       error_exit("Expected ';'");
     }
   }
 }
 
-void parse_server_name_directive(std::vector<std::string>& tokens, size_t& i,
-                                 ServerContext& sc) {
-  set_vector_string(tokens, i, sc.server_names, "server_name");
+void parse_server_name_directive(const std::vector<std::string>& tokens,
+                                 size_t token_index, ServerContext& sc) {
+  set_vector_string(tokens, token_index, sc.server_names, "server_name");
 }
 
-void parse_client_max_body_size_directive(std::vector<std::string>& tokens,
-                                          size_t& i, ServerContext& sc) {
-  if (i >= tokens.size() || tokens[i] == ";") {
+void parse_client_max_body_size_directive(
+    const std::vector<std::string>& tokens, size_t token_index,
+    ServerContext& sc) {
+  if (token_index >= tokens.size() || tokens[token_index] == ";") {
     error_exit("client_max_body_size_directive must have at least one value");
   }
 
-  sc.client_max_body_size = safe_strtol(tokens[i++], 0, __LONG_MAX__);
+  sc.client_max_body_size = safe_strtol(tokens[token_index++], 0, __LONG_MAX__);
 
-  if (i >= tokens.size() || tokens[i++] != ";") {
+  if (token_index >= tokens.size() || tokens[token_index++] != ";") {
     error_exit("Expected ';' after client_max_body_size values");
   }
 }
 
-void parse_server_root_directive(std::vector<std::string>& t, size_t& i,
-                                 ServerContext& sc) {
-  set_single_string(t, i, sc.server_root, "server root");
+void parse_server_root_directive(const std::vector<std::string>& tokens,
+                                 size_t token_index, ServerContext& sc) {
+  set_single_string(tokens, token_index, sc.server_root, "server root");
 }
 
-void parse_server_index_directive(std::vector<std::string>& tokens, size_t& i,
-                                  ServerContext& sc) {
-  set_vector_string(tokens, i, sc.server_index, "index");
+void parse_server_index_directive(const std::vector<std::string>& tokens,
+                                  size_t token_index, ServerContext& sc) {
+  set_vector_string(tokens, token_index, sc.server_index, "index");
 }
 
-void parse_error_page_directive(std::vector<std::string>& tokens, size_t& i,
-                                ServerContext& sc) {
+void parse_error_page_directive(const std::vector<std::string>& tokens,
+                                size_t token_index, ServerContext& sc) {
   std::vector<int> codes;
 
-  if (i >= tokens.size() || tokens[i] == ";")
+  if (token_index >= tokens.size() || tokens[token_index] == ";")
     error_exit("error_page directive needs values");
 
-  while (i < tokens.size() && tokens[i] != ";") {
-    codes.push_back(std::atoi(tokens[i].c_str()));
-    i++;
+  while (token_index < tokens.size() && tokens[token_index] != ";") {
+    codes.push_back(std::atoi(tokens[token_index].c_str()));
+    token_index++;
   }
   if (codes.size() < 2) {
     error_exit("error_page needs at least one code and a path");
   }
 
-  std::string path = tokens[i - 1];
+  std::string path = tokens[token_index - 1];
   codes.pop_back();
 
   for (size_t j = 0; j < codes.size(); ++j) {
     sc.error_pages[codes[j]] = path;
   }
 
-  if (i >= tokens.size() || tokens[i++] != ";") {
+  if (token_index >= tokens.size() || tokens[token_index++] != ";") {
     error_exit("Expected ';' after error_page values");
   }
 }
 
-typedef void (*LocationParser)(std::vector<std::string>&, size_t&,
+typedef void (*LocationParser)(const std::vector<std::string>&, size_t,
                                LocationContext&);
 
-void parse_location_directive(std::vector<std::string>& tokens, size_t& i,
-                              ServerContext& sc) {
+void parse_location_directive(const std::vector<std::string>& tokens,
+                              size_t token_index, ServerContext& sc) {
   LocationContext lc;
   lc.is_exact_match = false;
 
-  if (tokens[i] == "=") {
+  if (tokens[token_index] == "=") {
     lc.is_exact_match = true;
-    i++;
-  } else if (tokens[i] == "^~") {
+    token_index++;
+  } else if (tokens[token_index] == "^~") {
     lc.is_exact_match = false;
-    i++;
+    token_index++;
   }
 
-  if (i >= tokens.size() || tokens[i] == "{") {
+  if (token_index >= tokens.size() || tokens[token_index] == "{") {
     error_exit("Location path is missing");
   }
-  lc.path = tokens[i];
-  i++;
+  lc.path = tokens[token_index];
+  token_index++;
 
-  if (i >= tokens.size() || tokens[i] != "{") {
+  if (token_index >= tokens.size() || tokens[token_index] != "{") {
     error_exit("Expected '{' after location path");
   }
-  i++;
+  token_index++;
 
   static std::map<std::string, LocationParser> parsers;
   if (parsers.empty()) {
@@ -139,13 +140,13 @@ void parse_location_directive(std::vector<std::string>& tokens, size_t& i,
     parsers["allow_methods"] = parse_allow_methods_directive;
     parsers["autoindex"] = parse_autoindex_directive;
     parsers["return"] = parse_return_directive;
-    // parsers["cgi_extension"] = parse_cgi_extension_directive;
+    // TODO: parsers["cgi_extension"] = parse_cgi_extension_directive;
   }
 
-  while (i < tokens.size() && tokens[i] != "}") {
-    std::string key = tokens[i++];
+  while (token_index < tokens.size() && tokens[token_index] != "}") {
+    std::string key = tokens[token_index++];
     if (parsers.count(key)) {
-      parsers[key](tokens, i, lc);
+      parsers[key](tokens, token_index, lc);
     } else {
       error_exit("Unknown location directive: " + key);
     }
