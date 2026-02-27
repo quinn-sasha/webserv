@@ -10,6 +10,9 @@
 /*                                                                            */
 /* ************************************************************************** */
 
+#include <stdexcept>
+#include <string>
+
 #include "Config.hpp"
 #include "config_utils.hpp"
 #include "parse_location_directive.hpp"
@@ -153,31 +156,33 @@ void parse_location_directive(const std::vector<std::string>& tokens,
   }
 }
 
-// TODO: この関数についてkotaに質問する
 const LocationContext& ServerContext::get_matching_location(
-    const std::string& uri) const {
+    const std::string& uri_path) const {
   const LocationContext* best_match = NULL;
   size_t longest_len = 0;
 
   for (size_t i = 0; i < locations.size(); ++i) {
     const std::string& path = locations[i].path;
-    if (uri.find(path) == 0) {
-      bool is_border = false;
-      if (uri.length() == path.length()) {
-        is_border = true;
-      } else if (path[path.length() - 1] == '/') {
-        is_border = true;
-      } else if (uri[path.length()] == '/') {
-        is_border = true;
-      }
-
-      if (is_border) {
-        if (path.length() > longest_len) {
-          longest_len = path.length();
-          best_match = &locations[i];
-        }
+    if (uri_path.find(path) != 0) {
+      continue;
+    }
+    bool is_border = false;
+    if (uri_path.length() == path.length()) {
+      is_border = true;
+    } else if (path[path.length() - 1] == '/') {
+      is_border = true;
+    } else if (uri_path[path.length()] == '/') {
+      is_border = true;
+    }
+    if (is_border) {
+      if (path.length() > longest_len) {
+        longest_len = path.length();
+        best_match = &locations[i];
       }
     }
   }
-  if (best_match) return *best_match;
+  if (!best_match) {
+    throw std::runtime_error("get_matching_location(): location not found");
+  }
+  return *best_match;
 }
