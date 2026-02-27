@@ -2,6 +2,7 @@
 
 #include <fstream>
 #include <sstream>
+#include <stdexcept>
 
 #include "config_utils.hpp"
 #include "parse_server_directive.hpp"
@@ -132,25 +133,25 @@ void Config::parse_server(std::vector<std::string>& tokens, size_t& i) {
 }
 
 const ServerContext& Config::get_config(int port,
-                                        const std::string& host_header) const {
+                                        const std::string& host) const {
   std::vector<const ServerContext*> candidates;
   for (size_t i = 0; i < servers_.size(); ++i) {
     for (size_t j = 0; j < servers_[i].listens.size(); ++j) {
       if (servers_[i].listens[j].port == port) {
         candidates.push_back(&servers_[i]);
-        break;
       }
     }
   }
-
+  if (candidates.empty()) {
+    throw std::runtime_error("get_config(): no matching port");
+  }
   for (size_t i = 0; i < candidates.size(); ++i) {
     for (size_t j = 0; j < candidates[i]->server_names.size(); ++j) {
-      if (candidates[i]->server_names[j] == host_header) {
+      if (candidates[i]->server_names[j] == host) {
         return *candidates[i];
       }
     }
   }
-
   return *candidates[0];
 }
 

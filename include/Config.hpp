@@ -64,8 +64,7 @@ class Config {
  public:
   void load_file(const std::string& filepath);
   const std::vector<ServerContext>& get_configs() { return servers_; }
-  const ServerContext& get_config(int port,
-                                  const std::string& host_header) const;
+  const ServerContext& get_config(int port, const std::string& host) const;
 };
 
 #endif
