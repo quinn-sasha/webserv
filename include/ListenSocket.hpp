@@ -6,11 +6,6 @@
 
 #include <string>
 
-struct ListenConfig {
-  std::string addr;
-  std::string port;
-};
-
 class ListenSocket {
   int fd_;
   // Prohibit this 2 operations to prevent double close

@@ -7,6 +7,7 @@
 #include <signal.h>
 #include <sys/poll.h>
 
+#include <cstddef>
 #include <cstring>
 #include <map>
 #include <stdexcept>
@@ -21,18 +22,25 @@
 #include "MonitoredFdHandler.hpp"
 #include "SystemError.hpp"
 #include "pollfd_utils.hpp"
+#include "string_utils.hpp"
 
-Server::Server(const std::vector<ListenConfig>& listen_configs,
-               int maxpending) {
-  for (std::size_t i = 0; i < listen_configs.size(); i++) {
-    listen_sockets_.push_back(new ListenSocket(
-        listen_configs[i].addr, listen_configs[i].port, maxpending));
-    int listen_fd = listen_sockets_[i]->fd();
-    struct pollfd tmp;
-    set_pollfd_in(tmp, listen_fd);
-    poll_fds_.push_back(tmp);
-    MonitoredFdHandler* handler = new AcceptHandler(listen_fd, *this);
-    monitored_fd_to_handler_.insert(std::make_pair(listen_fd, handler));
+Server::Server(const std::string& config_file) {
+  config_.load_file(config_file);
+  for (std::size_t i = 0; i < config_.get_configs().size(); i++) {
+    const ServerContext& sc = config_.get_configs()[i];
+    for (std::size_t j = 0; j < sc.listens.size(); j++) {
+      std::string addr = sc.listens[j].address;
+      std::string port = int_to_string(sc.listens[j].port);
+      ListenSocket* listen_sock =
+          new ListenSocket(addr, port, max_connections_);
+      listen_sockets_.push_back(listen_sock);
+      struct pollfd tmp;
+      set_pollfd_in(tmp, listen_sock->fd());
+      poll_fds_.push_back(tmp);
+      MonitoredFdHandler* handler =
+          new AcceptHandler(listen_sock->fd(), *this, addr, port);
+      monitored_fd_to_handler_[listen_sock->fd()] = handler;
+    }
   }
 }
 
@@ -159,11 +167,13 @@ void Server::remove_client(int pollfd_index) {
   poll_fds_.erase(poll_fds_.begin() + pollfd_index);
 }
 
-void Server::register_new_client(int client_fd) {
+void Server::register_new_client(int client_fd, const std::string& addr,
+                                 const std::string& port) {
   struct pollfd tmp;
   set_pollfd_in(tmp, client_fd);
   poll_fds_.push_back(tmp);
-  MonitoredFdHandler* handler = new ClientHandler(client_fd, *this);
+  MonitoredFdHandler* handler =
+      new ClientHandler(client_fd, addr, port, *this, config_);
   monitored_fd_to_handler_.insert(std::make_pair(client_fd, handler));
 }
 
