@@ -14,7 +14,7 @@
 #include <utility>
 #include <ctime>
 #include <climits>
-#include <cstdint>
+#include <stdint.h>
 
 #include "AcceptHandler.hpp"
 #include "CgiInputHandler.hpp"
@@ -26,13 +26,11 @@
 #include "pollfd_utils.hpp"
 #include "string_utils.hpp"
 
-static std::int64_t now_ms_server() {
-  return static_cast<std::int64_t>(std::time(NULL)) * 1000;
+static int64_t now_ms_server() {
+  return static_cast<int64_t>(std::time(NULL)) * 1000;
 }
 
-static int clamp_timeout_ms(std::int64_t ms) {
-  // time() しか使えない前提なので、deadline の精度は秒です。
-  // poll を最大 1 秒で起こして deadline を再評価する。
+static int clamp_timeout_ms(int64_t ms) {
   if (ms < 0) return 0;
   if (ms > 1000) return 1000;
   return static_cast<int>(ms);
@@ -78,9 +76,9 @@ void Server::run() {
     }
 
     // 次のdeadlineまでの時間を poll の timeout にする
-    std::int64_t now = now_ms_server();
+    int64_t now = now_ms_server();
     bool has_deadline = false;
-    std::int64_t nearest_deadline = 0;
+    int64_t nearest_deadline = 0;
 
     for (std::size_t i = 0; i < poll_fds_.size(); ++i) {
       int fd = poll_fds_[i].fd;
@@ -91,7 +89,7 @@ void Server::run() {
       MonitoredFdHandler* h = it->second;
       if (!h->has_deadline()) continue;
 
-      std::int64_t dl = h->deadline_ms();
+      int64_t dl = h->deadline_ms();
       if (!has_deadline || dl < nearest_deadline) {
         has_deadline = true;
         nearest_deadline = dl;

@@ -8,8 +8,8 @@
 #include <signal.h>
 #include <sys/wait.h>
 
-static std::int64_t now_ms_cgi_in() {
-  return static_cast<std::int64_t>(std::time(NULL)) * 1000;
+static int64_t now_ms_cgi_in() {
+  return static_cast<int64_t>(std::time(NULL)) * 1000;
 }
 
 CgiInputHandler::CgiInputHandler(int pipe_in_fd, pid_t cgi_pid,
@@ -30,7 +30,7 @@ CgiInputHandler::~CgiInputHandler() {
 }
 
 bool CgiInputHandler::has_deadline() const { return true; }
-std::int64_t CgiInputHandler::deadline_ms() const { return deadline_ms_; }
+int64_t CgiInputHandler::deadline_ms() const { return deadline_ms_; }
 
 void CgiInputHandler::extend_deadline_on_activity_() {
   last_activity_ms_ = now_ms_cgi_in();

@@ -2,6 +2,9 @@
 
 #include <iostream>
 #include <sstream>
+#include <cstdlib>
+#include <cerrno>
+#include <algorithm> 
 
 void error_exit(const std::string& msg) {
   std::cerr << "Error: " << msg << std::endl;
@@ -69,10 +72,17 @@ void set_vector_string(const std::vector<std::string>& tokens,
   if (token_index >= tokens.size() || tokens[token_index] == ";")
     error_exit(directive_name + " needs a value");
 
-  while (token_index < tokens.size() || tokens[token_index++] != ";") {
-    field.push_back(tokens[token_index++]);
+  while (token_index < tokens.size() && tokens[token_index] != ";") {
+    field.push_back(tokens[token_index]);
+    ++token_index;
   }
 
-  if (token_index >= tokens.size() || tokens[token_index++] != ";")
+  if (token_index >= tokens.size() || tokens[token_index] != ";")
     error_exit(directive_name + ": expected ';'");
+}
+
+std::string to_string_long(long v) {
+  std::ostringstream oss;
+  oss << v;
+  return oss.str();
 }

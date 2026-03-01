@@ -2,7 +2,7 @@
 #define INCLUDE_CGIRESPONSEHANDLER_HPP_
 
 #include <sys/types.h>
-#include <cstdint>
+#include <stdint.h>
 #include <string>
 #include "MonitoredFdHandler.hpp"
 
@@ -17,7 +17,7 @@ class CgiResponseHandler : public MonitoredFdHandler {
 
   // timeout
   bool has_deadline() const;
-  std::int64_t deadline_ms() const;
+  int64_t deadline_ms() const;
   HandlerStatus handle_timeout();
 
   int get_client_fd() const { return client_fd_; }
@@ -25,7 +25,7 @@ class CgiResponseHandler : public MonitoredFdHandler {
   std::string parse_cgi_output(const std::string& cgi_output);
 
  private:
-  static const std::int64_t kCgiTimeoutMs = 30000;   // 30s
+  static const int64_t kCgiTimeoutMs = 30000;   // 30s
   static const std::size_t  kReadBufSize  = 4096;
 
   void extend_deadline_on_activity_();
@@ -39,9 +39,9 @@ class CgiResponseHandler : public MonitoredFdHandler {
   ssize_t bytes_sent_;
   bool cgi_finished_;
 
-  std::int64_t start_ms_;
-  std::int64_t last_activity_ms_;
-  std::int64_t deadline_ms_;
+  int64_t start_ms_;
+  int64_t last_activity_ms_;
+  int64_t deadline_ms_;
 };
 
 #endif  // INCLUDE_CGIRESPONSEHANDLER_HPP_

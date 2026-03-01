@@ -2,6 +2,9 @@
 #include <list>
 #include <sstream>
 #include <string>
+#include <cstdlib>
+#include <climits>
+#include <cerrno>
 
 std::string to_lower(std::string s) {
   for (size_t i = 0; i < s.length(); ++i) {
@@ -41,20 +44,17 @@ std::string trim(const std::string& target, std::string to_delete) {
 }
 
 // Returns 0 if success, otherwise -1
-int convert_to_integer(int& result, const std::string& input, int base) {
-  long int tmp_res = 0;
-  char* endptr;
-  tmp_res = std::strtol(input.c_str(), &endptr, base);
-  if (*endptr != '\0') {
+int convert_to_integer(int& out, const std::string& input, int base) {
+  char* endptr = NULL;
+  errno = 0;
+  long tmp_res = strtol(input.c_str(), &endptr, base);
+  if (endptr == input.c_str() || *endptr != '\0') {
     return -1;
   }
-  if (tmp_res == LONG_MIN || tmp_res == LONG_MAX) {
+  if (errno == ERANGE || tmp_res < INT_MIN || tmp_res > INT_MAX) {
     return -1;
   }
-  if (tmp_res < INT_MIN || tmp_res > INT_MAX) {
-    return -1;
-  }
-  result = static_cast<int>(tmp_res);
+  out = static_cast<int>(tmp_res);
   return 0;
 }
 

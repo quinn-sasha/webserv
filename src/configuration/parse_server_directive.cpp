@@ -1,17 +1,6 @@
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   parse_server_directive.cpp                         :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: ikota <ikota@student.42tokyo.jp>           +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/02/24 14:48:42 by ikota             #+#    #+#             */
-/*   Updated: 2026/02/26 16:27:30 by ikota            ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
-
 #include <stdexcept>
 #include <string>
+#include <cstdlib>
 
 #include "Config.hpp"
 #include "config_utils.hpp"
@@ -89,7 +78,7 @@ void parse_error_page_directive(const std::vector<std::string>& tokens,
     error_exit("error_page directive needs values");
 
   while (token_index < tokens.size() && tokens[token_index] != ";") {
-    codes.push_back(std::atoi(tokens[token_index].c_str()));
+    codes.push_back(atoi(tokens[token_index].c_str()));
     token_index++;
   }
   if (codes.size() < 2) {

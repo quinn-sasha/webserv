@@ -3,6 +3,7 @@
 
 #include <string>
 #include <sys/types.h>
+#include <stdint.h>
 
 #include "MonitoredFdHandler.hpp"
 
@@ -15,11 +16,25 @@ class CgiInputHandler : public MonitoredFdHandler {
   HandlerStatus handle_output();
   HandlerStatus handle_poll_error();
 
+  // timeout support
+  bool has_deadline() const;
+  int64_t deadline_ms() const;
+  HandlerStatus handle_timeout();
+
  private:
+  static const int64_t kCgiInputTimeoutMs = 30000;  // 30s
+
+  void extend_deadline_on_activity_();
+
   int         pipe_in_fd_;
   pid_t       cgi_pid_;
   std::string body_;
   std::size_t bytes_written_;
+
+  // deadline state
+  int64_t start_ms_;
+  int64_t last_activity_ms_;
+  int64_t deadline_ms_;
 
   CgiInputHandler(const CgiInputHandler&);
   CgiInputHandler& operator=(const CgiInputHandler&);

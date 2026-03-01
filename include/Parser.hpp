@@ -5,6 +5,7 @@
 #include <list>
 #include <map>
 #include <string>
+#include <cstdlib>
 
 enum ParserStatus {
   kBadRequest,

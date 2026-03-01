@@ -76,7 +76,7 @@ ParserStatus Parser::parse_request_target(const std::string& target) {
   if (target.find(' ') != std::string::npos) {
     return kBadRequest;
   }
-  if (target.front() != '/') {
+  if  (target.empty() || target[0] != '/') {
     return kBadRequest;
   }
   request_.target = target;

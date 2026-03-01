@@ -15,8 +15,8 @@
 
 #include "Server.hpp"
 
-static std::int64_t now_ms() {
-  return static_cast<std::int64_t>(std::time(NULL)) * 1000;
+static int64_t now_ms() {
+  return static_cast<int64_t>(std::time(NULL)) * 1000;
 }
 
 static std::string make_504_response() {
@@ -68,7 +68,7 @@ CgiResponseHandler::~CgiResponseHandler() {
 }
 
 bool CgiResponseHandler::has_deadline() const { return true; }
-std::int64_t CgiResponseHandler::deadline_ms() const { return deadline_ms_; }
+int64_t CgiResponseHandler::deadline_ms() const { return deadline_ms_; }
 
 HandlerStatus CgiResponseHandler::handle_timeout() {
   if (send_buffer_.empty()) {
