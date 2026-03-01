@@ -2,6 +2,8 @@
 #define INCLUDE_PARSE_LOCATION_DIRECTIVE
 
 #include <vector>
+#include <string>
+#include <algorithm>
 
 #include "Config.hpp"
 

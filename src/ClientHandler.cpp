@@ -49,21 +49,22 @@ HandlerStatus ClientHandler::handle_input() {
   }
 
   // kParseFinished or some error status
+  const ServerContext& target_config = config_.get_config(my_port, host_name);
   ProcesseorResult result = RequestProcessor::process(status, parser_.get_request());
 
   if (result.next_action == ProcesseorResult::kExecuteCgi) {
     state_ = kExecutingCgi;
-    
+
     CgiHandler cgi(parser_.get_request());
     if (cgi.execute_cgi(result.script_path) == -1) {
       // Failed to execute CGI, send 500
-      response_.prepare_error_response(kInternalServerError); 
+      response_.prepare_error_response(kInternalServerError);
       response_str_ = response_.serialize();
       state_ = kSendingResponse;
       return kHandlerReceived;
     }
 
-    server_.register_cgi_fd(cgi.get_pipe_in_fd(), cgi.get_pipe_out_fd(), 
+    server_.register_cgi_fd(cgi.get_pipe_in_fd(), cgi.get_pipe_out_fd(),
                                 cgi.get_cgi_pid(),
                                 parser_.get_request().body, client_fd_);
 
@@ -74,7 +75,7 @@ HandlerStatus ClientHandler::handle_input() {
 
   // Normal response
   state_ = kSendingResponse;
-  response_ = result.response; // Maybe this copy is too heavy 
+  response_ = result.response; // Maybe this copy is too heavy
   response_str_ = response_.serialize();
   bytes_sent_ = 0;
   return kHandlerReceived;
@@ -89,18 +90,18 @@ HandlerStatus ClientHandler::handle_output() {
   }
 
   ssize_t remaining = response_str_.size() - bytes_sent_;
-  ssize_t num_sent = 
+  ssize_t num_sent =
       send(client_fd_, response_str_.data() + bytes_sent_, remaining, 0);
-  
+
   if (num_sent == -1) {
     return kHandlerClosed;
   }
-  
+
   bytes_sent_ += num_sent;
-  
+
   if (bytes_sent_ < response_str_.size()) {
     return kHandlerContinue;
   }
-  
+
   return kHandlerSent;
 }

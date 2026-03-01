@@ -3,6 +3,7 @@
 #include <string>
 
 #include "Parser.hpp"
+#include "string_utils.hpp"
 
 void Response::prepare_error_response(ParserStatus status /*, request */) {
   switch (status) {
@@ -28,6 +29,14 @@ void Response::prepare_error_response(ParserStatus status /*, request */) {
 
 // TODO: add arguments
 void Response::prepare_success_response() { status_code_ = "200"; }
+
+void Response::prepare_redirect_response(int status, const std::string& redirect_url) {
+  status_code_ = int_to_string(status);
+
+  headers_["Location"] = redirect_url;
+
+  //TODO: write body
+}
 
 std::string Response::serialize() const {
   std::string response;

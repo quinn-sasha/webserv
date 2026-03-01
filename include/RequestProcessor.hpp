@@ -3,6 +3,7 @@
 
 #include "Parser.hpp"
 #include "Response.hpp"
+#include "Config.hpp"
 
 struct ProcesseorResult {
   enum Action {
@@ -10,7 +11,7 @@ struct ProcesseorResult {
     kExecuteCgi,
   };
   Action next_action;
-  Response response;  // Needed if normal operation or error 
+  Response response;  // Needed if normal operation or error
   // Something CGI needs
   std::string script_path; // CGIスクリプトのパスを保持
 };
@@ -18,7 +19,7 @@ struct ProcesseorResult {
 class RequestProcessor {
  public:
   static ProcesseorResult process(
-      ParserStatus status, const Request& request);
+      ParserStatus status, const Request& request, const ServerContext& target_config);
 };
 
 #endif  // INCLUDE_REQUESTPROCESSOR_HPP_

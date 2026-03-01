@@ -2,6 +2,7 @@
 #include <list>
 #include <sstream>
 #include <string>
+#include "Parser.hpp"
 
 std::string to_lower(std::string s) {
   for (size_t i = 0; i < s.length(); ++i) {
@@ -62,4 +63,13 @@ std::string int_to_string(int num) {
   std::stringstream ss;
   ss << num;
   return ss.str();
+}
+
+std::string method_to_str(HttpMethod method) {
+  switch (method) {
+    case kGet:    return "get";
+    case kPost:   return "post";
+    case kDelete: return "delete";
+    default:      return "unknown";
+  }
 }

@@ -12,6 +12,7 @@ struct ConfigLimits {
   static const long kRedirectCodeMax = 399;
   static const long kMovedPermanently = 301;
   static const long kFound = 302;
+  static const long kSeeOther = 303;
   static const long kTemporaryRedirect = 307;
   static const long kPermanentRedirect = 308;
 };

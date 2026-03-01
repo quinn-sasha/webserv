@@ -54,8 +54,8 @@ void parse_return_directive(const std::vector<std::string>& tokens,
                          ConfigLimits::kRedirectCodeMax);
 
   if (val != ConfigLimits::kMovedPermanently && val != ConfigLimits::kFound &&
-      val != ConfigLimits::kTemporaryRedirect &&
-      val != ConfigLimits::kPermanentRedirect) {
+      val != ConfigLimits::kSeeOther && val != ConfigLimits::kTemporaryRedirect &&
+      val != ConfigLimits::kPermanentRedirect ) {
     error_exit("Unsupported redirect status: " + std::to_string(val));
   }
   lc.redirect_status_code = static_cast<int>(val);

@@ -15,6 +15,7 @@ class Response {
  public:
   void prepare_error_response(ParserStatus status /*, request */);
   void prepare_success_response();  // TODO: add arguments
+  void prepare_redirect_response(int status, const std::string& redirect_url);
   std::string serialize() const;
 };
 
