@@ -19,7 +19,11 @@ SRCS_NO_MAIN := $(SRC_DIR)/AcceptHandler.cpp \
                 $(SRC_DIR)/CgiHandler.cpp \
 				$(SRC_DIR)/MetaVariables.cpp \
 				$(SRC_DIR)/CgiInputHandler.cpp \
-                $(SRC_DIR)/CgiResponseHandler.cpp
+                $(SRC_DIR)/CgiResponseHandler.cpp \
+                $(SRC_DIR)/configuration/config_utils.cpp \
+                $(SRC_DIR)/configuration/Config.cpp \
+                $(SRC_DIR)/configuration/parse_location_directive.cpp \
+                $(SRC_DIR)/configuration/parse_server_directive.cpp
 
 OBJS_NO_MAIN := $(SRCS_NO_MAIN:$(SRC_DIR)/%.cpp=$(OBJ_DIR)/%.o)
 MAIN_OBJ     := $(OBJ_DIR)/main.o
@@ -49,7 +53,7 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 
 $(OBJ_DIR)/test/%.o: $(TEST_DIR)/%.cpp
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(GTEST_INC) -c $< -o $@
+	$(CC) $(CFLAGS) -std=c++17 $(GTEST_INC) -c $< -o $@
 
 clean:
 	$(RM) $(OBJ_DIR)

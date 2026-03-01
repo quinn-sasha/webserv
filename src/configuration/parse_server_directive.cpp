@@ -154,6 +154,10 @@ void parse_location_directive(const std::vector<std::string>& tokens,
       error_exit("Unknown location directive: " + key);
     }
   }
+  if (token_index < tokens.size() && tokens[token_index] == "}") {
+    token_index++;
+  }
+  sc.locations.push_back(lc);
 }
 
 const LocationContext& ServerContext::get_matching_location(

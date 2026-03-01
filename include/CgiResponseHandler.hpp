@@ -16,6 +16,8 @@ class CgiResponseHandler : public MonitoredFdHandler {
   
   int get_client_fd() const { return client_fd_; }
 
+  std::string parse_cgi_output(const std::string& cgi_output);
+
  private:
   int cgi_fd_;
   int client_fd_;
@@ -25,8 +27,6 @@ class CgiResponseHandler : public MonitoredFdHandler {
   std::string send_buffer_;
   ssize_t bytes_sent_;
   bool cgi_finished_;
-  
-  std::string parse_cgi_output(const std::string& cgi_output);
 };
 
 #endif  // INCLUDE_CGIRESPONSEHANDLER_HPP_

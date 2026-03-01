@@ -15,14 +15,15 @@ void check_ip_format(const std::string& ip) {
   std::string segment;
   int count = 0;
 
-  if (std::count(ip.begin(), ip.end(), ".") != 3) {
-    error_exit("Invalid IP format: '" + ip + "' (must bi x.x.x.x)");
+  if (std::count(ip.begin(), ip.end(), '.') != 3) {
+    error_exit("Invalid IP format: '" + ip + "' (must be x.x.x.x)");
   }
 
   while (std::getline(ss, segment, '.')) {
     if (segment.empty())
       error_exit("Invalid IP: empty segment in '" + ip + "'");
     safe_strtol(segment, 0, 255);
+    count++;
   }
 
   if (count != 4) {
