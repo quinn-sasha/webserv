@@ -24,6 +24,8 @@ class CgiHandler {
   int pipe_out_fd_;
   pid_t cgi_pid_;
 
+  void exec_cgi_child(int pipe_in[2], int pipe_out[2], const std::string& script_path);
+
   CgiHandler(const CgiHandler&);
   CgiHandler& operator=(const CgiHandler&);
 };

@@ -61,18 +61,30 @@ MetaVariables MetaVariables::from_request(const Request& request,
                                           const std::string& script_path) {
   MetaVariables env;
 
-  // --- ① Special Variables (Core Identity) ---
   env.request_method_ = method_to_str(request.method);
   env.script_filename_ = script_path;
 
-  // target = path [ "?" query ]
-  std::string path = request.target;
-  std::size_t q_pos = path.find('?');
+  std::string full_path = request.target;
+  std::size_t q_pos = full_path.find('?');
   if (q_pos != std::string::npos) {
-    env.query_string_ = path.substr(q_pos + 1);
-    path = path.substr(0, q_pos);
+    env.query_string_ = full_path.substr(q_pos + 1);
+    full_path = full_path.substr(0, q_pos);
   } else {
     env.query_string_ = "";
+  }
+
+  std::string script_name = full_path;
+  std::string path_info = "";
+  std::string cgi_prefix = "/cgi-bin/";
+  std::size_t cgi_pos = full_path.find(cgi_prefix);
+  
+  if (cgi_pos != std::string::npos) {
+    std::size_t start_search = cgi_pos + cgi_prefix.length();
+    std::size_t next_slash = full_path.find('/', start_search);
+    if (next_slash != std::string::npos) {
+      script_name = full_path.substr(0, next_slash);
+      path_info = full_path.substr(next_slash);
+    }
   }
 
   if (request.headers.count("content-type")) {
@@ -86,30 +98,26 @@ MetaVariables MetaVariables::from_request(const Request& request,
   }
 
   // --- ② Meta Variables (CGI Standard) ---
-  env.meta_variables_["SCRIPT_NAME"] = path;
-  env.meta_variables_["PATH_INFO"] = path;
+  env.meta_variables_["SCRIPT_NAME"] = script_name;
+  env.meta_variables_["PATH_INFO"] = path_info;
   env.meta_variables_["SERVER_PROTOCOL"] = "HTTP/1.1";
   env.meta_variables_["GATEWAY_INTERFACE"] = "CGI/1.1";
   env.meta_variables_["SERVER_SOFTWARE"] = "webserv/1.0";
+  env.meta_variables_["SERVER_NAME"] = "localhost"; //TODO:correct NAME
+  env.meta_variables_["SERVER_PORT"] = "8888"; //TODO:correct PORT
+  //env.meta_variables_["REMOTE_ADDR"] = "..."
 
-  // These could be set from some server config/client info
-  env.meta_variables_["SERVER_NAME"] = "localhost"; // TODO set correct server name
-  env.meta_variables_["SERVER_PORT"] = "8888"; // TODO set correct server port
-  // env.meta_variables_["REMOTE_ADDR"] = "...";
-
-  // --- ③ HTTP Headers (Map, prefixed with HTTP_) ---
   for (std::map<std::string, std::string>::const_iterator it =
            request.headers.begin();
        it != request.headers.end(); ++it) {
-    const std::string& key = it->first;
-    const std::string& val = it->second;
+    const std::string& k = it->first;
+    const std::string& v = it->second;
 
-    if (key.empty()) continue;
+    if (k.empty()) continue;
 
-    // CGI では CONTENT_TYPE/CONTENT_LENGTH は特殊扱いのため除外
-    if (key == "content-type" || key == "content-length") continue;
+    if (k == "content-type" || k == "content-length") continue;
 
-    env.http_headers_[to_upper_http_env_key(key)] = val;
+    env.http_headers_[to_upper_http_env_key(k)] = v;
   }
 
   return env;

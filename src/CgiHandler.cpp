@@ -15,6 +15,22 @@
 #include "CgiResponseHandler.hpp"
 #include "pollfd_utils.hpp"
 
+static void cgi_error_exit(const char* func_name) {
+  std::cerr << "Error: " << func_name << " " << strerror(errno) << "\n";
+  std::exit(1);
+}
+
+static int set_nonblocking(int fd) {
+  int flags = fcntl(fd, F_GETFL, 0);
+  if (flags == -1) {
+    return -1;
+  }
+  if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1) {
+    return -1;
+  }
+  return 0;
+}
+
 CgiHandler::CgiHandler(const Request& request) 
     : request_(request),
       pipe_in_fd_(-1),
@@ -24,7 +40,7 @@ CgiHandler::CgiHandler(const Request& request)
 CgiHandler::~CgiHandler() {
 }
 
-static std::string get_interpreter_from_shebang(const std::string& script_path) {
+static std::string from_shebang(const std::string& script_path) {
   std::ifstream ifs(script_path.c_str());
   if (!ifs.is_open()) return "";
 
@@ -46,7 +62,7 @@ static std::string get_interpreter_from_shebang(const std::string& script_path) 
 static std::vector<std::string> get_interpreter(const std::string& script_path) {
   std::vector<std::string> args;
   // まず shebang で確認
-  std::string shebang = get_interpreter_from_shebang(script_path);
+  std::string shebang = from_shebang(script_path);
   if (!shebang.empty()) {
     std::istringstream iss(shebang);
     std::string token;
@@ -74,19 +90,55 @@ static std::vector<std::string> get_interpreter(const std::string& script_path) 
   return args;
 }
 
+void CgiHandler::exec_cgi_child(int pipe_in[2], int pipe_out[2], const std::string& script_path) {
+  close(pipe_in[1]);
+  if (dup2(pipe_in[0], STDIN_FILENO) == -1) {
+    cgi_error_exit("dup2(stdin)");
+  }
+  close(pipe_in[0]);
+
+  close(pipe_out[0]);
+  if (dup2(pipe_out[1], STDOUT_FILENO) == -1) {
+    cgi_error_exit("dup2(stdout)");
+  }
+  close(pipe_out[1]);
+
+  std::string script_dir = script_path;
+  std::size_t slash = script_dir.rfind('/');
+  if (slash != std::string::npos) {
+    script_dir = script_dir.substr(0, slash);
+    if (chdir(script_dir.c_str()) == -1) {
+      cgi_error_exit("chdir");
+    }
+  }
+
+  MetaVariables env = MetaVariables::from_request(request_, script_path);
+  char** envp = env.build_envp(); 
+
+  std::vector<std::string> argv_strs = get_interpreter(script_path);
+  std::vector<char*> argv_ptrs;
+  for (std::size_t i = 0; i < argv_strs.size(); ++i)
+    argv_ptrs.push_back(const_cast<char*>(argv_strs[i].c_str()));
+  argv_ptrs.push_back(NULL);
+
+  execve(argv_ptrs[0], &argv_ptrs[0], envp);
+
+  cgi_error_exit("execve");
+}
+
 int CgiHandler::execute_cgi(const std::string& script_path) {  
   int pipe_in[2];
   int pipe_out[2];
 
   if (pipe(pipe_in) == -1 || pipe(pipe_out) == -1) {
-    std::cerr << "Error: pipe() failed: " << strerror(errno) << "\n";
+    std::cerr << "Error: pipe " << strerror(errno) << "\n";
     return -1;
   }
 
   cgi_pid_ = fork();
 
   if (cgi_pid_ == -1) {
-    std::cerr << "Error: fork() failed: " << strerror(errno) << "\n";
+    std::cerr << "Error: fork " << strerror(errno) << "\n";
     close(pipe_in[0]);  
     close(pipe_in[1]);
     close(pipe_out[0]); 
@@ -95,44 +147,7 @@ int CgiHandler::execute_cgi(const std::string& script_path) {
   }
 
   if (cgi_pid_ == 0) {
-    close(pipe_in[1]);
-    if (dup2(pipe_in[0], STDIN_FILENO) == -1) {
-      std::cerr << "Error: dup2(stdin) failed: " << strerror(errno) << "\n";
-      std::exit(1);
-    }
-    close(pipe_in[0]);
-
-    close(pipe_out[0]);
-    if (dup2(pipe_out[1], STDOUT_FILENO) == -1) {
-      std::cerr << "Error: dup2(stdout) failed: " << strerror(errno) << "\n";
-      std::exit(1);
-    }
-    close(pipe_out[1]);
-
-    std::string script_dir = script_path;
-    std::size_t slash = script_dir.rfind('/');
-    if (slash != std::string::npos) {
-      script_dir = script_dir.substr(0, slash);
-      if (chdir(script_dir.c_str()) == -1) {
-        std::cerr << "Error: chdir() failed: " << strerror(errno) << "\n";
-        std::exit(1);
-      }
-    }
-
-    MetaVariables env = MetaVariables::from_request(request_, script_path);
-    char** envp = env.build_envp(); 
-
-    std::vector<std::string> argv_strs = get_interpreter(script_path);
-    std::vector<char*> argv_ptrs;
-    for (std::size_t i = 0; i < argv_strs.size(); ++i)
-      argv_ptrs.push_back(const_cast<char*>(argv_strs[i].c_str()));
-    argv_ptrs.push_back(NULL);
-
-    execve(argv_ptrs[0], &argv_ptrs[0], envp);
-
-    std::cerr << "Error: execve() failed: " << strerror(errno) << "\n";
-    MetaVariables::destroy_envp(envp); 
-    std::exit(1);
+    exec_cgi_child(pipe_in, pipe_out, script_path);
   }
 
   // 親プロセス
@@ -140,10 +155,10 @@ int CgiHandler::execute_cgi(const std::string& script_path) {
   close(pipe_out[1]);
 
   // ノンブロッキング設定
-  int flags = fcntl(pipe_in[1], F_GETFL, 0);
-  fcntl(pipe_in[1], F_SETFL, flags | O_NONBLOCK);
-  flags = fcntl(pipe_out[0], F_GETFL, 0);
-  fcntl(pipe_out[0], F_SETFL, flags | O_NONBLOCK);
+  if (set_nonblocking(pipe_in[1]) == -1 || set_nonblocking(pipe_out[0]) == -1) {
+    std::cerr << "Error: fcntl " << strerror(errno) << "\n";
+    return -1;
+  }
 
   pipe_in_fd_ = pipe_in[1];
   pipe_out_fd_ = pipe_out[0];

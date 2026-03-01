@@ -30,6 +30,17 @@ static std::string make_504_response() {
   return oss.str();
 }
 
+static std::string make_502_response() {
+  const char* body = "<h1>502 Bad Gateway</h1>";
+  std::ostringstream oss;
+  oss << "HTTP/1.1 502 Bad Gateway\r\n"
+      << "Content-Type: text/html\r\n"
+      << "Content-Length: " << strlen(body) << "\r\n"
+      << "\r\n"
+      << body;
+  return oss.str();
+}
+
 CgiResponseHandler::CgiResponseHandler(int cgi_fd, int client_fd, pid_t cgi_pid)
     : cgi_fd_(cgi_fd),
       client_fd_(client_fd),
@@ -96,9 +107,6 @@ HandlerStatus CgiResponseHandler::handle_input() {
   ssize_t n = read(cgi_fd_, buffer, sizeof(buffer));
 
   if (n == -1) {
-    if (errno == EAGAIN || errno == EWOULDBLOCK) {
-      return kHandlerContinue;
-    }
     return kHandlerClosed;
   }
 
@@ -122,8 +130,7 @@ HandlerStatus CgiResponseHandler::handle_input() {
     }
 
     if (cgi_error) {
-      send_buffer_ =
-          "HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/html\r\nContent-Length: 24\r\n\r\n<h1>502 Bad Gateway</h1>";
+      send_buffer_ = make_502_response();
     } else {
       send_buffer_ = parse_cgi_output(cgi_output_);
     }
@@ -187,7 +194,7 @@ std::string CgiResponseHandler::parse_cgi_output(const std::string& cgi_output) 
   if (body_start == std::string::npos) {
     body_start = cgi_output.find("\n\n");
     if (body_start == std::string::npos) {
-      return "HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/html\r\nContent-Length: 24\r\n\r\n<h1>502 Bad Gateway</h1>";
+      return make_502_response();
     }
     body_start += 2;
   } else {
@@ -237,7 +244,7 @@ std::string CgiResponseHandler::parse_cgi_output(const std::string& cgi_output) 
   // Content-Type または Location のどちらかは必須
   if (!has_content_type && !has_location) {
     std::cerr << "CGI Error: Missing both Content-Type and Location headers.\n";
-    return "HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/html\r\nContent-Length: 24\r\n\r\n<h1>502 Bad Gateway</h1>";
+    return make_502_response();
   }
 
   // ステータスラインの決定
