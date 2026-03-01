@@ -10,30 +10,54 @@
 #include <sstream>
 #include <cctype>
 #include <map>
+#include <ctime>
+#include <signal.h>
 
 #include "Server.hpp"
 
-CgiResponseHandler::CgiResponseHandler(int cgi_fd, int client_fd, 
-                                       pid_t cgi_pid)
+static std::int64_t now_ms() {
+  return static_cast<std::int64_t>(std::time(NULL)) * 1000;
+}
+
+static std::string make_504_response() {
+  const char* body = "<h1>504 Gateway Timeout</h1>";
+  std::ostringstream oss;
+  oss << "HTTP/1.1 504 Gateway Timeout\r\n"
+      << "Content-Type: text/html\r\n"
+      << "Content-Length: " << strlen(body) << "\r\n"
+      << "\r\n"
+      << body;
+  return oss.str();
+}
+
+CgiResponseHandler::CgiResponseHandler(int cgi_fd, int client_fd, pid_t cgi_pid)
     : cgi_fd_(cgi_fd),
       client_fd_(client_fd),
       cgi_pid_(cgi_pid),
       bytes_sent_(0),
-      cgi_finished_(false)
-      {}
+      cgi_finished_(false),
+      start_ms_(now_ms()),
+      last_activity_ms_(start_ms_) {
+  deadline_ms_ = start_ms_ + kCgiTimeoutMs;
+}
+
+void CgiResponseHandler::extend_deadline_on_activity_() {
+  last_activity_ms_ = now_ms();
+  deadline_ms_ = last_activity_ms_ + kCgiTimeoutMs;
+}
 
 CgiResponseHandler::~CgiResponseHandler() {
   if (cgi_fd_ != -1) {
     close(cgi_fd_);
   }
-  
+
   // CGIプロセスが生きていたら終了待機
   if (cgi_pid_ > 0) {
     int status;
     if (waitpid(cgi_pid_, &status, WNOHANG) == 0) {
       waitpid(cgi_pid_, &status, 0);
     }
-    
+
     if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
       std::cerr << "CGI exited with status " << WEXITSTATUS(status) << "\n";
     }
@@ -43,42 +67,73 @@ CgiResponseHandler::~CgiResponseHandler() {
   }
 }
 
+bool CgiResponseHandler::has_deadline() const { return true; }
+std::int64_t CgiResponseHandler::deadline_ms() const { return deadline_ms_; }
+
+HandlerStatus CgiResponseHandler::handle_timeout() {
+  if (send_buffer_.empty()) {
+    send_buffer_ = make_504_response();
+    bytes_sent_ = 0;
+  }
+
+  if (cgi_fd_ != -1) {
+    close(cgi_fd_);
+    cgi_fd_ = -1;
+  }
+
+  if (cgi_pid_ > 0) {
+    kill(cgi_pid_, SIGKILL);
+    int status;
+    waitpid(cgi_pid_, &status, 0);
+    cgi_pid_ = -1;
+  }
+
+  return kCgiReceived;
+}
+
 HandlerStatus CgiResponseHandler::handle_input() {
-  char buffer[4096];
+  char buffer[kReadBufSize];
   ssize_t n = read(cgi_fd_, buffer, sizeof(buffer));
-  
+
   if (n == -1) {
+    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+      return kHandlerContinue;
+    }
     return kHandlerClosed;
   }
-  
+
   if (n == 0) {
     // CGI出力受信完了
     cgi_finished_ = true;
-    
+
     // CGIプロセスの終了コードを確認
     bool cgi_error = false;
     if (cgi_pid_ > 0) {
       int status;
       pid_t wpid = waitpid(cgi_pid_, &status, 0);
       if (wpid == cgi_pid_) {
-        if ((WIFEXITED(status) && WEXITSTATUS(status) != 0) || WIFSIGNALED(status)) {
+        if ((WIFEXITED(status) && WEXITSTATUS(status) != 0) ||
+            WIFSIGNALED(status)) {
           cgi_error = true;
           std::cerr << "CGI Error: Process terminated abnormally.\n";
         }
-        cgi_pid_ = -1; 
+        cgi_pid_ = -1;
       }
     }
 
     if (cgi_error) {
-      send_buffer_ = "HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/html\r\nContent-Length: 24\r\n\r\n<h1>502 Bad Gateway</h1>";
+      send_buffer_ =
+          "HTTP/1.1 502 Bad Gateway\r\nContent-Type: text/html\r\nContent-Length: 24\r\n\r\n<h1>502 Bad Gateway</h1>";
     } else {
       send_buffer_ = parse_cgi_output(cgi_output_);
     }
-    
+
     bytes_sent_ = 0;
     return kCgiReceived;
   }
-  
+
+  extend_deadline_on_activity_();
+
   cgi_output_.append(buffer, n);
   return kHandlerContinue;
 }
@@ -88,25 +143,28 @@ HandlerStatus CgiResponseHandler::handle_output() {
     close(cgi_fd_);
     cgi_fd_ = -1;
   }
-  
+
   if (send_buffer_.empty()) {
     return kHandlerClosed;
   }
-  
+
   ssize_t remaining = send_buffer_.size() - bytes_sent_;
-  ssize_t n = send(client_fd_, send_buffer_.data() + bytes_sent_, 
-                   remaining, 0);
-  
+  ssize_t n =
+      send(client_fd_, send_buffer_.data() + bytes_sent_, remaining, 0);
+
   if (n == -1) {
+    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+      return kHandlerContinue;
+    }
     return kHandlerClosed;
   }
-  
+
   bytes_sent_ += n;
-  
+
   if (bytes_sent_ < static_cast<ssize_t>(send_buffer_.size())) {
     return kHandlerContinue;
   }
-  
+
   return kHandlerSent;
 }
 
