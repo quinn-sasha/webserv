@@ -23,6 +23,8 @@
 #include "pollfd_utils.hpp"
 #include "string_utils.hpp"
 
+volatile sig_atomic_t g_running = true;
+
 Server::Server(const std::string& config_file) : num_clients_(0) {
   config_.load_file(config_file);
   for (std::size_t i = 0; i < config_.get_configs().size(); i++) {
@@ -57,7 +59,7 @@ void Server::run() {
   if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
     throw SystemError("signal()");
   }
-  while (true) {
+  while (g_running) {
     if (poll_fds_.empty()) {
       throw std::runtime_error("Error: poll_fds_ must not be empty");
     }
