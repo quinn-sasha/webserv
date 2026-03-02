@@ -62,7 +62,6 @@ HandlerStatus CgiInputHandler::handle_output() {
   ssize_t n = write(pipe_in_fd_, body_.data() + bytes_written_,
                     body_.size() - bytes_written_);
   if (n == -1) {
-    // EPIPE (Broken Pipe) 等は Fatal にせず単に閉じる
     std::cerr << "Note: write() to CGI failed (CGI likely closed stdin): "
               << strerror(errno) << "\n";
     close(pipe_in_fd_);

@@ -5,22 +5,22 @@
 #include <sstream> 
 
 void parse_location_root_directive(const std::vector<std::string>& tokens,
-                                   size_t token_index, LocationContext& lc) {
+                                   size_t& token_index, LocationContext& lc) {
   set_single_string(tokens, token_index, lc.root, "root");
 }
 
 void parse_upload_store_directive(const std::vector<std::string>& tokens,
-                                  size_t token_index, LocationContext& lc) {
+                                  size_t& token_index, LocationContext& lc) {
   set_single_string(tokens, token_index, lc.upload_store, "upload_store");
 }
 
 void parse_location_index_directive(const std::vector<std::string>& tokens,
-                                    size_t token_index, LocationContext& lc) {
+                                    size_t& token_index, LocationContext& lc) {
   set_vector_string(tokens, token_index, lc.index, "index");
 }
 
 void parse_allow_methods_directive(const std::vector<std::string>& tokens,
-                                   size_t token_index, LocationContext& lc) {
+                                   size_t& token_index, LocationContext& lc) {
   set_vector_string(tokens, token_index, lc.allow_methods, "allow_methods");
   for (size_t i = 0; i < lc.allow_methods.size(); ++i) {
     std::transform(lc.allow_methods[i].begin(), lc.allow_methods[i].end(),
@@ -32,7 +32,7 @@ void parse_allow_methods_directive(const std::vector<std::string>& tokens,
 }
 
 void parse_autoindex_directive(const std::vector<std::string>& tokens,
-                               size_t token_index, LocationContext& lc) {
+                               size_t& token_index, LocationContext& lc) {
   if (token_index >= tokens.size() || tokens[token_index] == ";") {
     error_exit("autoindex needs a value (on/off)");
   }
@@ -48,7 +48,7 @@ void parse_autoindex_directive(const std::vector<std::string>& tokens,
 }
 
 void parse_return_directive(const std::vector<std::string>& tokens,
-                            size_t token_index, LocationContext& lc) {
+                            size_t& token_index, LocationContext& lc) {
   if (token_index >= tokens.size() || tokens[token_index] == ";")
     error_exit("return directive needs a status code");
 

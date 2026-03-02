@@ -97,11 +97,11 @@ static void finalize_server_context(ServerContext& sc) {
 }
 
 void Config::parse_server(const std::vector<std::string>& tokens,
-                          size_t token_index) {
+                          size_t& token_index) {
   if (token_index >= tokens.size() || tokens[token_index++] != "{") {
     error_exit("Expected '{' after server");
   }
-  static std::map<std::string, ServerParser> s_parsers;
+  static std::map<std::string, void (*)(const std::vector<std::string>&, size_t&, ServerContext&)> s_parsers;
   if (s_parsers.empty()) {
     s_parsers["listen"] = parse_listen_directive;
     s_parsers["server_name"] = parse_server_name_directive;
@@ -118,12 +118,11 @@ void Config::parse_server(const std::vector<std::string>& tokens,
       servers_.push_back(sc);
       return;
     }
-    std::string key = tokens[token_index];
+    std::string key = tokens[token_index++];
     if (s_parsers.find(key) == s_parsers.end()) {
       error_exit("Unknown directive: " + key);
     }
     s_parsers[key](tokens, token_index, sc);
-    token_index++;
   }
   error_exit("Unexpected end of file: missing '}' in server block");
 }

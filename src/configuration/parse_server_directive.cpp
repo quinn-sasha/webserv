@@ -7,47 +7,49 @@
 #include "parse_location_directive.hpp"
 
 void parse_listen_directive(const std::vector<std::string>& tokens,
-                            size_t token_index, ServerContext& sc) {
+                            size_t& token_index, ServerContext& sc) {
   if (token_index >= tokens.size() || tokens[token_index] == ";") {
     error_exit("Empty listen");
   }
 
   ListenConfig lc;
-  std::string val = tokens[token_index];
-  size_t colon_pos = val.find(':');
+  const std::string val = tokens[token_index++];
 
+  const size_t colon_pos = val.find(':');
   if (colon_pos != std::string::npos) {
-    // IP:PORT
+    // HOST:PORT
     lc.address = val.substr(0, colon_pos);
-    check_ip_format(lc.address);
+    std::string port_str = val.substr(colon_pos + 1);
+
     if (lc.address == "localhost") {
       lc.address = "127.0.0.1";
-      std::string port_str = val.substr(colon_pos + 1);
-      lc.port = static_cast<int>(safe_strtol(port_str, ConfigLimits::kPortMin,
-                                             ConfigLimits::kPortMax));
     } else {
-      // PORT only
-      lc.address = "0.0.0.0";
-      lc.port = static_cast<int>(
-          safe_strtol(val, ConfigLimits::kPortMin, ConfigLimits::kPortMax));
+      check_ip_format(lc.address);
     }
 
-    sc.listens.push_back(lc);
-    token_index++;
+    lc.port = static_cast<int>(
+        safe_strtol(port_str, ConfigLimits::kPortMin, ConfigLimits::kPortMax));
+  } else {
+    // PORT only
+    lc.address = "0.0.0.0";
+    lc.port = static_cast<int>(
+        safe_strtol(val, ConfigLimits::kPortMin, ConfigLimits::kPortMax));
+  }
 
-    if (token_index >= tokens.size() || tokens[token_index++] != ";") {
-      error_exit("Expected ';'");
-    }
+  sc.listens.push_back(lc);
+
+  if (token_index >= tokens.size() || tokens[token_index++] != ";") {
+    error_exit("Expected ';' after listen");
   }
 }
 
 void parse_server_name_directive(const std::vector<std::string>& tokens,
-                                 size_t token_index, ServerContext& sc) {
+                                 size_t& token_index, ServerContext& sc) {
   set_vector_string(tokens, token_index, sc.server_names, "server_name");
 }
 
 void parse_client_max_body_size_directive(
-    const std::vector<std::string>& tokens, size_t token_index,
+    const std::vector<std::string>& tokens, size_t& token_index,
     ServerContext& sc) {
   if (token_index >= tokens.size() || tokens[token_index] == ";") {
     error_exit("client_max_body_size_directive must have at least one value");
@@ -61,17 +63,17 @@ void parse_client_max_body_size_directive(
 }
 
 void parse_server_root_directive(const std::vector<std::string>& tokens,
-                                 size_t token_index, ServerContext& sc) {
+                                 size_t& token_index, ServerContext& sc) {
   set_single_string(tokens, token_index, sc.server_root, "server root");
 }
 
 void parse_server_index_directive(const std::vector<std::string>& tokens,
-                                  size_t token_index, ServerContext& sc) {
+                                  size_t& token_index, ServerContext& sc) {
   set_vector_string(tokens, token_index, sc.server_index, "index");
 }
 
 void parse_error_page_directive(const std::vector<std::string>& tokens,
-                                size_t token_index, ServerContext& sc) {
+                                size_t& token_index, ServerContext& sc) {
   std::vector<int> codes;
 
   if (token_index >= tokens.size() || tokens[token_index] == ";")
@@ -97,11 +99,11 @@ void parse_error_page_directive(const std::vector<std::string>& tokens,
   }
 }
 
-typedef void (*LocationParser)(const std::vector<std::string>&, size_t,
+typedef void (*LocationParser)(const std::vector<std::string>&, size_t&,
                                LocationContext&);
 
 void parse_location_directive(const std::vector<std::string>& tokens,
-                              size_t token_index, ServerContext& sc) {
+                              size_t& token_index, ServerContext& sc) {
   LocationContext lc;
   lc.is_exact_match = false;
 
@@ -129,7 +131,10 @@ void parse_location_directive(const std::vector<std::string>& tokens,
     parsers["root"] = parse_location_root_directive;
     parsers["upload_store"] = parse_upload_store_directive;
     parsers["index"] = parse_location_index_directive;
+
     parsers["allow_methods"] = parse_allow_methods_directive;
+    parsers["methods"] = parse_allow_methods_directive;
+
     parsers["autoindex"] = parse_autoindex_directive;
     parsers["return"] = parse_return_directive;
     // TODO: parsers["cgi_extension"] = parse_cgi_extension_directive;

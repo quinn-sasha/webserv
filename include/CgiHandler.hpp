@@ -8,7 +8,11 @@
 #include "Parser.hpp"
 
 class CgiHandler {
- public:
+ public:  
+ struct ExecArgv {
+    std::string file;              
+    std::vector<std::string> argv;  
+  };
   explicit CgiHandler(const Request& request);
   ~CgiHandler();
 
@@ -19,6 +23,7 @@ class CgiHandler {
   pid_t get_cgi_pid() const { return cgi_pid_; }
 
  private:
+
   const Request& request_;
   int pipe_in_fd_;
   int pipe_out_fd_;

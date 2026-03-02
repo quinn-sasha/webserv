@@ -55,7 +55,7 @@ long safe_strtol(const std::string& str, long min_val, long max_val) {
 }
 
 void set_single_string(const std::vector<std::string>& tokens,
-                       size_t token_index, std::string& field,
+                       size_t& token_index, std::string& field,
                        const std::string& directive_name) {
   if (token_index >= tokens.size() || tokens[token_index] == ";")
     error_exit(directive_name + " needs a value");
@@ -67,7 +67,7 @@ void set_single_string(const std::vector<std::string>& tokens,
 }
 
 void set_vector_string(const std::vector<std::string>& tokens,
-                       size_t token_index, std::vector<std::string>& field,
+                       size_t& token_index, std::vector<std::string>& field,
                        const std::string& directive_name) {
   if (token_index >= tokens.size() || tokens[token_index] == ";")
     error_exit(directive_name + " needs a value");
@@ -79,6 +79,8 @@ void set_vector_string(const std::vector<std::string>& tokens,
 
   if (token_index >= tokens.size() || tokens[token_index] != ";")
     error_exit(directive_name + ": expected ';'");
+
+  ++token_index;
 }
 
 std::string to_string_long(long v) {

@@ -60,7 +60,7 @@ class Config {
   std::vector<ServerContext> servers_;
   std::string read_file(const std::string& filepath);
   std::vector<std::string> tokenize(const std::string& content);
-  void parse_server(const std::vector<std::string>& tokens, size_t token_index);
+  void parse_server(const std::vector<std::string>& tokens, size_t& token_index);
 
  public:
   void load_file(const std::string& filepath);
