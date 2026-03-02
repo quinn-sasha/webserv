@@ -12,6 +12,8 @@
 #include "ListenSocket.hpp"
 #include "MonitoredFdHandler.hpp"
 
+class ClientHandler; 
+
 class Server {
   static const std::size_t kMaxClients = 4096;
   std::size_t num_clients_;
@@ -25,11 +27,17 @@ class Server {
   ~Server();
   void run();
   HandlerStatus handle_fd_event(int pollfd_index);
-  void register_cgi_fd(int pipe_in_fd, int pipe_out_fd, pid_t cgi_pid,
-                       const std::string& body, int client_fd);
+
   int register_new_client(int client_fd, const std::string& addr,
                           const std::string& port);
-  void remove_client(int pollfd_index);
+
+  void remove_client(int pollfd_index);  
+  void remove_fd(int pollfd_index);
+
+  void register_fd(int fd, MonitoredFdHandler* handler, short events);
+  void set_fd_events(int fd, short events);
+  ClientHandler* find_client_handler(int client_fd); 
+
 };
 
 #endif  // INCLUDE_SERVER_HPP_

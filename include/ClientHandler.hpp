@@ -39,6 +39,8 @@ class ClientHandler : public MonitoredFdHandler {
   ClientHandler(int client_fd, const std::string& addr, const std::string& port,
                 Server& server, Config& config);
   ~ClientHandler();
+  void cgi_response_ready(const std::string& response);
+
   HandlerStatus handle_input();
   HandlerStatus handle_output();
   HandlerStatus handle_poll_error() { return kHandlerClosed; }

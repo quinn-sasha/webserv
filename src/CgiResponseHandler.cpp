@@ -1,96 +1,167 @@
 #include "CgiResponseHandler.hpp"
 
-#include <sys/socket.h>
-#include <sys/wait.h>
 #include <unistd.h>
+#include <sys/wait.h>
+#include <signal.h>
 
 #include <cerrno>
 #include <cstring>
 #include <iostream>
 #include <sstream>
-#include <cctype>
 #include <map>
+#include <cctype>
 #include <ctime>
-#include <signal.h>
 
 #include "Server.hpp"
+#include "ClientHandler.hpp"
 
-static int64_t now_ms() {
+static int64_t now_ms_cgi_out() {
   return static_cast<int64_t>(std::time(NULL)) * 1000;
 }
 
-static std::string make_504_response() {
-  const char* body = "<h1>504 Gateway Timeout</h1>";
-  std::ostringstream oss;
-  oss << "HTTP/1.1 504 Gateway Timeout\r\n"
-      << "Content-Type: text/html\r\n"
-      << "Content-Length: " << strlen(body) << "\r\n"
-      << "\r\n"
-      << body;
-  return oss.str();
-}
-
-static std::string make_502_response() {
-  const char* body = "<h1>502 Bad Gateway</h1>";
-  std::ostringstream oss;
-  oss << "HTTP/1.1 502 Bad Gateway\r\n"
-      << "Content-Type: text/html\r\n"
-      << "Content-Length: " << strlen(body) << "\r\n"
-      << "\r\n"
-      << body;
-  return oss.str();
-}
-
-CgiResponseHandler::CgiResponseHandler(int cgi_fd, int client_fd, pid_t cgi_pid)
-    : cgi_fd_(cgi_fd),
-      client_fd_(client_fd),
+CgiResponseHandler::CgiResponseHandler(int out_fd, pid_t cgi_pid, Server& server, int client_fd)
+    : out_fd_(out_fd),
       cgi_pid_(cgi_pid),
-      bytes_sent_(0),
-      cgi_finished_(false),
-      start_ms_(now_ms()),
+      server_(server),
+      client_fd_(client_fd),
+      cgi_output_(),
+      finished_(false),
+      start_ms_(now_ms_cgi_out()),
       last_activity_ms_(start_ms_) {
   deadline_ms_ = start_ms_ + kCgiTimeoutMs;
 }
 
-void CgiResponseHandler::extend_deadline_on_activity_() {
-  last_activity_ms_ = now_ms();
-  deadline_ms_ = last_activity_ms_ + kCgiTimeoutMs;
-}
-
 CgiResponseHandler::~CgiResponseHandler() {
-  if (cgi_fd_ != -1) {
-    close(cgi_fd_);
+  if (out_fd_ != -1) {
+    close(out_fd_);
+    out_fd_ = -1;
   }
 
-  // CGIプロセスが生きていたら終了待機
   if (cgi_pid_ > 0) {
     int status;
-    if (waitpid(cgi_pid_, &status, WNOHANG) == 0) {
-      waitpid(cgi_pid_, &status, 0);
-    }
-
-    if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
-      std::cerr << "CGI exited with status " << WEXITSTATUS(status) << "\n";
-    }
-    if (WIFSIGNALED(status)) {
-      std::cerr << "CGI killed by signal " << WTERMSIG(status) << "\n";
-    }
+    waitpid(cgi_pid_, &status, WNOHANG);
+    cgi_pid_ = -1;
   }
 }
 
 bool CgiResponseHandler::has_deadline() const { return true; }
 int64_t CgiResponseHandler::deadline_ms() const { return deadline_ms_; }
 
-HandlerStatus CgiResponseHandler::handle_timeout() {
-  if (send_buffer_.empty()) {
-    send_buffer_ = make_504_response();
-    bytes_sent_ = 0;
+void CgiResponseHandler::extend_deadline_on_activity_() {
+  last_activity_ms_ = now_ms_cgi_out();
+  deadline_ms_ = last_activity_ms_ + kCgiTimeoutMs;
+}
+
+std::string CgiResponseHandler::make_504_response_() {
+  const char* body = "<h1>504 Gateway Timeout</h1>";
+  std::ostringstream oss;
+  oss << "HTTP/1.1 504 Gateway Timeout\r\n"
+      << "Content-Type: text/html\r\n"
+      << "Content-Length: " << std::strlen(body) << "\r\n"
+      << "\r\n"
+      << body;
+  return oss.str();
+}
+
+std::string CgiResponseHandler::make_502_response_() {
+  const char* body = "<h1>502 Bad Gateway</h1>";
+  std::ostringstream oss;
+  oss << "HTTP/1.1 502 Bad Gateway\r\n"
+      << "Content-Type: text/html\r\n"
+      << "Content-Length: " << std::strlen(body) << "\r\n"
+      << "\r\n"
+      << body;
+  return oss.str();
+}
+
+static std::string key_to_lower_local(const std::string& str) {
+  std::string lower = str;
+  for (std::size_t i = 0; i < lower.size(); ++i) {
+    lower[i] = std::tolower(static_cast<unsigned char>(lower[i]));
+  }
+  return lower;
+}
+
+std::string CgiResponseHandler::parse_cgi_output_(const std::string& cgi_output) {
+  std::size_t body_start = cgi_output.find("\r\n\r\n");
+  if (body_start == std::string::npos) {
+    body_start = cgi_output.find("\n\n");
+    if (body_start == std::string::npos) {
+      return make_502_response_();
+    }
+    body_start += 2;
+  } else {
+    body_start += 4;
   }
 
-  if (cgi_fd_ != -1) {
-    close(cgi_fd_);
-    cgi_fd_ = -1;
+  std::string headers_str = cgi_output.substr(0, body_start);
+  std::string body = cgi_output.substr(body_start);
+
+  std::map<std::string, std::string> headers_map;
+  std::istringstream headers_stream(headers_str);
+  std::string line;
+  std::string status_line;
+
+  while (std::getline(headers_stream, line)) {
+    if (!line.empty() && line[line.size() - 1] == '\r') {
+      line.erase(line.size() - 1);
+    }
+    if (line.empty()) continue;
+
+    std::size_t colon_pos = line.find(':');
+    if (colon_pos == std::string::npos) continue;
+
+    std::string key = line.substr(0, colon_pos);
+    std::string value = line.substr(colon_pos + 1);
+
+    std::size_t value_start = value.find_first_not_of(" \t");
+    if (value_start != std::string::npos) value = value.substr(value_start);
+    else value = "";
+
+    std::string lower_key = key_to_lower_local(key);
+    if (lower_key == "status") status_line = value;
+    else headers_map[lower_key] = value;
   }
+
+  const bool has_content_type = headers_map.count("content-type") != 0;
+  const bool has_location = headers_map.count("location") != 0;
+
+  if (!has_content_type && !has_location) {
+    std::cerr << "CGI Error: Missing both Content-Type and Location headers.\n";
+    return make_502_response_();
+  }
+
+  if (status_line.empty()) {
+    status_line = has_location ? "302 Found" : "200 OK";
+  }
+
+  std::ostringstream resp;
+  resp << "HTTP/1.1 " << status_line << "\r\n";
+
+  for (std::map<std::string, std::string>::iterator it = headers_map.begin();
+       it != headers_map.end(); ++it) {
+    std::string key = it->first;
+    if (!key.empty()) {
+      key[0] = std::toupper(static_cast<unsigned char>(key[0]));
+      for (std::size_t i = 1; i < key.size(); ++i) {
+        if (key[i - 1] == '-') key[i] = std::toupper(static_cast<unsigned char>(key[i]));
+      }
+    }
+    resp << key << ": " << it->second << "\r\n";
+  }
+
+  if (headers_map.find("content-length") == headers_map.end() &&
+      headers_map.find("transfer-encoding") == headers_map.end()) {
+    resp << "Content-Length: " << body.size() << "\r\n";
+  }
+
+  resp << "\r\n" << body;
+  return resp.str();
+}
+
+HandlerStatus CgiResponseHandler::handle_timeout() {
+  if (finished_) return kCgiInputDone;
+  finished_ = true;
 
   if (cgi_pid_ > 0) {
     kill(cgi_pid_, SIGKILL);
@@ -99,188 +170,66 @@ HandlerStatus CgiResponseHandler::handle_timeout() {
     cgi_pid_ = -1;
   }
 
-  return kCgiReceived;
+  if (out_fd_ != -1) {
+    close(out_fd_);
+    out_fd_ = -1;
+  }
+
+  ClientHandler* ch = server_.find_client_handler(client_fd_);
+  if (ch != NULL) {
+    ch->cgi_response_ready(make_504_response_());
+  }
+
+  return kCgiInputDone;
 }
 
 HandlerStatus CgiResponseHandler::handle_input() {
-  char buffer[kReadBufSize];
-  ssize_t n = read(cgi_fd_, buffer, sizeof(buffer));
+  if (finished_) return kCgiInputDone;
+
+  char buf[kReadBufSize];
+  ssize_t n = read(out_fd_, buf, sizeof(buf));
 
   if (n == -1) {
+    if (errno == EAGAIN || errno == EWOULDBLOCK) return kHandlerContinue;
     return kHandlerClosed;
   }
 
   if (n == 0) {
-    // CGI出力受信完了
-    cgi_finished_ = true;
+    finished_ = true;
 
-    // CGIプロセスの終了コードを確認
     bool cgi_error = false;
     if (cgi_pid_ > 0) {
       int status;
       pid_t wpid = waitpid(cgi_pid_, &status, 0);
       if (wpid == cgi_pid_) {
-        if ((WIFEXITED(status) && WEXITSTATUS(status) != 0) ||
-            WIFSIGNALED(status)) {
+        if ((WIFEXITED(status) && WEXITSTATUS(status) != 0) || WIFSIGNALED(status)) {
           cgi_error = true;
-          std::cerr << "CGI Error: Process terminated abnormally.\n";
         }
-        cgi_pid_ = -1;
       }
+      cgi_pid_ = -1;
     }
 
-    if (cgi_error) {
-      send_buffer_ = make_502_response();
-    } else {
-      send_buffer_ = parse_cgi_output(cgi_output_);
+    const std::string resp = cgi_error ? make_502_response_()
+                                       : parse_cgi_output_(cgi_output_);
+
+    ClientHandler* ch = server_.find_client_handler(client_fd_);
+    if (ch != NULL) {
+      ch->cgi_response_ready(resp);
     }
 
-    bytes_sent_ = 0;
-    return kCgiReceived;
+    return kCgiInputDone;
   }
 
   extend_deadline_on_activity_();
-
-  cgi_output_.append(buffer, n);
+  cgi_output_.append(buf, n);
   return kHandlerContinue;
 }
 
 HandlerStatus CgiResponseHandler::handle_output() {
-  if (cgi_fd_ != -1) {
-    close(cgi_fd_);
-    cgi_fd_ = -1;
-  }
-
-  if (send_buffer_.empty()) {
-    return kHandlerClosed;
-  }
-
-  ssize_t remaining = send_buffer_.size() - bytes_sent_;
-  ssize_t n =
-      send(client_fd_, send_buffer_.data() + bytes_sent_, remaining, 0);
-
-  if (n == -1) {
-    if (errno == EAGAIN || errno == EWOULDBLOCK) {
-      return kHandlerContinue;
-    }
-    return kHandlerClosed;
-  }
-
-  bytes_sent_ += n;
-
-  if (bytes_sent_ < static_cast<ssize_t>(send_buffer_.size())) {
-    return kHandlerContinue;
-  }
-
-  return kHandlerSent;
+  return kHandlerContinue;
 }
 
 HandlerStatus CgiResponseHandler::handle_poll_error() {
-  std::cerr << "Error: poll error on CGI fd\n";
+  std::cerr << "Error : CgiResponseHandler's poll" << std::endl;
   return kHandlerClosed;
-}
-
-static std::string key_to_lower(const std::string& str) {
-  std::string lower_str = str;
-  for (std::size_t i = 0; i < lower_str.size(); ++i) {
-    lower_str[i] = std::tolower(static_cast<unsigned char>(lower_str[i]));
-  }
-  return lower_str;
-}
-
-std::string CgiResponseHandler::parse_cgi_output(const std::string& cgi_output) {
-  // ヘッダーとボディを分離
-  std::size_t body_start = cgi_output.find("\r\n\r\n");
-  if (body_start == std::string::npos) {
-    body_start = cgi_output.find("\n\n");
-    if (body_start == std::string::npos) {
-      return make_502_response();
-    }
-    body_start += 2;
-  } else {
-    body_start += 4;
-  }
-  
-  std::string headers_str = cgi_output.substr(0, body_start);
-  std::string body = cgi_output.substr(body_start);
-  
-  std::map<std::string, std::string> headers_map;
-  std::istringstream headers_stream(headers_str);
-  std::string line;
-  std::string status_line = ""; // CGIが明示的に指定したStatusを保持する
-  
-  while (std::getline(headers_stream, line)) {
-    if (!line.empty() && line[line.size() - 1] == '\r') {
-      line.erase(line.size() - 1);
-    }
-    if (line.empty()) continue;
-    
-    std::size_t colon_pos = line.find(':');
-    if (colon_pos != std::string::npos) {
-      std::string key = line.substr(0, colon_pos);
-      std::string value = line.substr(colon_pos + 1);
-      
-      // Trim leading spaces from value
-      std::size_t value_start = value.find_first_not_of(" \t");
-      if (value_start != std::string::npos) {
-        value = value.substr(value_start);
-      } else {
-        value = "";
-      }
-      
-      std::string lower_key = key_to_lower(key);
-      if (lower_key == "status") {
-        status_line = value;
-      } else {
-        // Location ヘッダーの値を保存（後でリダイレクト判定に使用）
-        headers_map[lower_key] = value;
-      }
-    }
-  }
-  
-  bool has_content_type = headers_map.count("content-type");
-  bool has_location = headers_map.count("location");
-
-  // Content-Type または Location のどちらかは必須
-  if (!has_content_type && !has_location) {
-    std::cerr << "CGI Error: Missing both Content-Type and Location headers.\n";
-    return make_502_response();
-  }
-
-  // ステータスラインの決定
-  if (status_line.empty()) {
-    if (has_location) {
-      // Client Redirect / Local Redirect Response
-      status_line = "302 Found";
-    } else {
-      // Document Response
-      status_line = "200 OK";
-    }
-  }
-
-  std::ostringstream response;
-  response << "HTTP/1.1 " << status_line << "\r\n";
-  
-  // 保存したヘッダーを出力
-  for (std::map<std::string, std::string>::iterator it = headers_map.begin(); 
-       it != headers_map.end(); ++it) {
-    std::string key = it->first;
-    // 先頭とハイフンの後を大文字にする簡易的な整形
-    if (!key.empty()) {
-      key[0] = std::toupper(key[0]);
-      for (size_t i = 1; i < key.size(); ++i) {
-        if (key[i-1] == '-') key[i] = std::toupper(key[i]);
-      }
-    }
-    response << key << ": " << it->second << "\r\n";
-  }
-  
-  // Content-Length や Transfer-Encoding が指定されていなければ自動付与
-  if (headers_map.find("content-length") == headers_map.end() &&
-      headers_map.find("transfer-encoding") == headers_map.end()) {
-    response << "Content-Length: " << body.size() << "\r\n";
-  }
-  
-  response << "\r\n" << body;
-  return response.str();
 }

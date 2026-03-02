@@ -13,9 +13,11 @@
 #include "Parser.hpp"
 #include "RequestProcessor.hpp"
 #include "CgiHandler.hpp"
-#include "CgiResponseHandler.hpp"
+#include "CgiInputHandler.hpp"
+#include "CgiResponseHandler.hpp" 
 #include "Server.hpp"
 #include "pollfd_utils.hpp"
+
 
 ClientHandler::ClientHandler(int client_fd, const std::string& addr,
                              const std::string& port, Server& server,
@@ -35,6 +37,10 @@ ClientHandler::~ClientHandler() {
 }
 
 HandlerStatus ClientHandler::handle_input() {
+  if (state_ == kExecutingCgi) {
+    return kHandlerContinue;
+  }
+
   ssize_t num_read = recv(client_fd_, buffer_, buf_size, 0);
   if (num_read == -1) {
     return kHandlerClosed;
@@ -53,23 +59,33 @@ HandlerStatus ClientHandler::handle_input() {
 
   if (result.next_action == ProcesseorResult::kExecuteCgi) {
     state_ = kExecutingCgi;
-    
+
     CgiHandler cgi(parser_.get_request());
     if (cgi.execute_cgi(result.script_path) == -1) {
-      // Failed to execute CGI, send 500
-      response_.prepare_error_response(kInternalServerError); 
+      response_.prepare_error_response(kInternalServerError);
       response_str_ = response_.serialize();
       state_ = kSendingResponse;
       return kHandlerReceived;
     }
 
-    server_.register_cgi_fd(cgi.get_pipe_in_fd(), cgi.get_pipe_out_fd(), 
-                                cgi.get_cgi_pid(),
-                                parser_.get_request().body, client_fd_);
+    // client_fd は保持したまま、一旦 poll 監視を止める（読みも書きもしない）
+    server_.set_fd_events(client_fd_, 0);
 
-    // This ClientHandler is no longer needed as CGI handlers will take over
-    client_fd_ = -1;
-    return kHandlerClosed;
+    // pipe だけ別ハンドラで監視
+    server_.register_fd(cgi.get_pipe_in_fd(),
+                        new CgiInputHandler(cgi.get_pipe_in_fd(),
+                                            cgi.get_cgi_pid(),
+                                            parser_.get_request().body),
+                        POLLOUT);
+
+    server_.register_fd(cgi.get_pipe_out_fd(),
+                        new CgiResponseHandler(cgi.get_pipe_out_fd(),
+                                           cgi.get_cgi_pid(),
+                                           server_,
+                                           client_fd_),
+                        POLLIN);
+
+    return kHandlerContinue;
   }
 
   // Normal response
@@ -103,4 +119,12 @@ HandlerStatus ClientHandler::handle_output() {
   }
   
   return kHandlerSent;
+}
+
+void ClientHandler::cgi_response_ready(const std::string& response) {
+  response_str_ = response;
+  bytes_sent_ = 0;
+  state_ = kSendingResponse;
+
+  server_.set_fd_events(client_fd_, POLLOUT);
 }
