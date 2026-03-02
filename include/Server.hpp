@@ -36,7 +36,7 @@ class Server {
 
   void register_fd(int fd, MonitoredFdHandler* handler, short events);
   void set_fd_events(int fd, short events);
-  ClientHandler* find_client_handler(int client_fd); 
+  ClientHandler* find_client_handler(int client_fd); // cgi -> client_fd のチェック
 
 };
 
