@@ -25,6 +25,8 @@
 #include "pollfd_utils.hpp"
 #include "string_utils.hpp"
 
+volatile sig_atomic_t g_running = true;
+
 static int64_t now_ms_server() {
   return static_cast<int64_t>(std::time(NULL)) * 1000;
 }
@@ -73,7 +75,7 @@ void Server::run() {
   if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
     throw SystemError("signal()");
   }
-  while (true) {
+  while (g_running) {
     if (poll_fds_.empty()) {
       throw std::runtime_error("Error: poll_fds_ must not be empty");
     }
