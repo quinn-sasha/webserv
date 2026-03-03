@@ -21,10 +21,6 @@ static void cgi_error_exit(const char* func_name, int code) {
   _exit(code);
 }
 
-static void cgi_error_exit(const char* func_name) {
-  cgi_error_exit(func_name, 1);
-}
-
 static int set_nonblocking(int fd) {
   int flags = fcntl(fd, F_GETFL, 0);
   if (flags == -1) {
@@ -139,13 +135,13 @@ static CgiHandler::ExecArgv build_exec_argv(const std::string& script_path,
 void CgiHandler::exec_cgi_child(int pipe_in[2], int pipe_out[2], const std::string& script_path) {
   close(pipe_in[1]);
   if (dup2(pipe_in[0], STDIN_FILENO) == -1) {
-    cgi_error_exit("dup2(stdin)");
+    cgi_error_exit("dup2(stdin)", -1);
   }
   close(pipe_in[0]);
 
   close(pipe_out[0]);
   if (dup2(pipe_out[1], STDOUT_FILENO) == -1) {
-    cgi_error_exit("dup2(stdout)");
+    cgi_error_exit("dup2(stdout)", -1);
   }
   close(pipe_out[1]);
 
@@ -156,7 +152,7 @@ void CgiHandler::exec_cgi_child(int pipe_in[2], int pipe_out[2], const std::stri
     script_dir = script_dir.substr(0, slash);
     script_name = script_path.substr(slash + 1);
     if (chdir(script_dir.c_str()) == -1) {
-      cgi_error_exit("chdir");
+      cgi_error_exit("chdir", -1);
     }
   }
 

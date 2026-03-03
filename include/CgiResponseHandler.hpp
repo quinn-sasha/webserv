@@ -18,15 +18,15 @@ class CgiResponseHandler : public MonitoredFdHandler {
 
   HandlerStatus handle_input();
   HandlerStatus handle_output();
-  HandlerStatus handle_timeout();
   HandlerStatus handle_poll_error();
 
   // timeout support
-  bool has_deadline() const;
-  int64_t deadline_ms() const;
+  virtual bool has_deadline() const;
+  virtual int64_t deadline_ms() const;
+  virtual HandlerStatus handle_timeout();
 
  private:
-  static const int64_t kCgiTimeoutMs = 30000;   // 30s
+  static const int64_t kCgiTimeoutMs = 10000;   // 10s
   static const std::size_t kReadBufSize = 4096;
 
   void extend_deadline_on_activity_();

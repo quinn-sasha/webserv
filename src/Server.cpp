@@ -219,9 +219,6 @@ HandlerStatus Server::handle_fd_event(int pollfd_index) {
   if (status == kHandlerSent) {
     return kHandlerClosed;  // TODO: implement keep-alive (optional)
   }
-  if (poll_fd.revents & (POLLERR)) {
-    return handler->handle_poll_error();
-  }
   return kHandlerContinue;
 }
 

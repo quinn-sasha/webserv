@@ -53,7 +53,7 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
 
 $(OBJ_DIR)/test/%.o: $(TEST_DIR)/%.cpp
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -std=c++17 $(GTEST_INC) -c $< -o $@
+	$(CC) $(CFLAGS) $(GTEST_INC) -c $< -o $@
 
 clean:
 	$(RM) $(OBJ_DIR)
