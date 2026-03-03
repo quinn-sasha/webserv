@@ -8,8 +8,8 @@
 #include <signal.h>
 #include <sys/wait.h>
 
-static int64_t now_ms_cgi_in() {
-  return static_cast<int64_t>(std::time(NULL)) * 1000;
+static int64_t now_time_cgi_in() {
+  return static_cast<int64_t>(std::time(NULL));
 }
 
 CgiInputHandler::CgiInputHandler(int pipe_in_fd, pid_t cgi_pid,
@@ -18,9 +18,9 @@ CgiInputHandler::CgiInputHandler(int pipe_in_fd, pid_t cgi_pid,
       cgi_pid_(cgi_pid),
       body_(body),
       bytes_written_(0),
-      start_ms_(now_ms_cgi_in()),
-      last_activity_ms_(start_ms_) {
-  deadline_ms_ = start_ms_ + kCgiInputTimeoutMs;
+      start_sec_(now_time_cgi_in()),
+      last_activity_sec_(start_sec_) {
+  deadline_sec_ = start_sec_ + kCgiInputTimeoutMs;
 }
 
 CgiInputHandler::~CgiInputHandler() {
@@ -30,11 +30,11 @@ CgiInputHandler::~CgiInputHandler() {
 }
 
 bool CgiInputHandler::has_deadline() const { return true; }
-int64_t CgiInputHandler::deadline_ms() const { return deadline_ms_; }
+int64_t CgiInputHandler::deadline_ms() const { return deadline_sec_; }
 
 void CgiInputHandler::extend_deadline_on_activity_() {
-  last_activity_ms_ = now_ms_cgi_in();
-  deadline_ms_ = last_activity_ms_ + kCgiInputTimeoutMs;
+  last_activity_sec_ = now_time_cgi_in();
+  deadline_sec_ = last_activity_sec_ + kCgiInputTimeoutMs;
 }
 
 HandlerStatus CgiInputHandler::handle_timeout() {

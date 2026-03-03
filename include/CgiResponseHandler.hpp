@@ -27,6 +27,7 @@ class CgiResponseHandler : public MonitoredFdHandler {
 
  private:
   static const int64_t kCgiTimeoutMs = 10000;   // 10s
+  static const int64_t kCgiTimeoutSec = 10;   // 10s
   static const std::size_t kReadBufSize = 4096;
 
   void extend_deadline_on_activity_();
@@ -43,9 +44,9 @@ class CgiResponseHandler : public MonitoredFdHandler {
   std::string cgi_output_;
 
   bool finished_;
-  int64_t start_ms_;
-  int64_t last_activity_ms_;
-  int64_t deadline_ms_;
+  int64_t start_sec_;
+  int64_t last_activity_sec_;
+  int64_t deadline_sec_;
 
   CgiResponseHandler(const CgiResponseHandler&);
   CgiResponseHandler& operator=(const CgiResponseHandler&);

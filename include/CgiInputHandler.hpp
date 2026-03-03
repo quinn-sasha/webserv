@@ -32,9 +32,9 @@ class CgiInputHandler : public MonitoredFdHandler {
   std::size_t bytes_written_;
 
   // deadline state
-  int64_t start_ms_;
-  int64_t last_activity_ms_;
-  int64_t deadline_ms_;
+  int64_t start_sec_;
+  int64_t last_activity_sec_;
+  int64_t deadline_sec_;
 
   CgiInputHandler(const CgiInputHandler&);
   CgiInputHandler& operator=(const CgiInputHandler&);

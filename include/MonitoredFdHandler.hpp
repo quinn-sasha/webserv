@@ -10,7 +10,6 @@ enum HandlerStatus {
   kHandlerAccepted,    // AcceptHandler
   kHandlerClosed,      // ClientHandler
   kHandlerFatalError,  // AcceptHandler, ClientHandler
-  kCgiReceived,        // cgi
   kCgiInputDone        // cgi
 };
 

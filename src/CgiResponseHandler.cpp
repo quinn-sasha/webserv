@@ -15,8 +15,8 @@
 #include "Server.hpp"
 #include "ClientHandler.hpp"
 
-static int64_t now_ms_cgi_out() {
-  return static_cast<int64_t>(std::time(NULL)) * 1000;
+static int64_t now_time_cgi_out() {
+  return static_cast<int64_t>(std::time(NULL)); // 秒
 }
 
 CgiResponseHandler::CgiResponseHandler(int out_fd, pid_t cgi_pid, Server& server, int client_fd)
@@ -26,9 +26,9 @@ CgiResponseHandler::CgiResponseHandler(int out_fd, pid_t cgi_pid, Server& server
       client_fd_(client_fd),
       cgi_output_(),
       finished_(false),
-      start_ms_(now_ms_cgi_out()),
-      last_activity_ms_(start_ms_) {
-  deadline_ms_ = start_ms_ + kCgiTimeoutMs;
+      start_sec_(now_time_cgi_out()),
+      last_activity_sec_(start_sec_) {
+  deadline_sec_ = start_sec_ + kCgiTimeoutSec;
 }
 
 CgiResponseHandler::~CgiResponseHandler() {
@@ -45,11 +45,11 @@ CgiResponseHandler::~CgiResponseHandler() {
 }
 
 bool CgiResponseHandler::has_deadline() const { return true; }
-int64_t CgiResponseHandler::deadline_ms() const { return deadline_ms_; }
+int64_t CgiResponseHandler::deadline_ms() const { return deadline_sec_; }
 
 void CgiResponseHandler::extend_deadline_on_activity_() {
-  last_activity_ms_ = now_ms_cgi_out();
-  deadline_ms_ = last_activity_ms_ + kCgiTimeoutMs;
+  last_activity_sec_ = now_time_cgi_out();
+  deadline_sec_ = last_activity_sec_ + kCgiTimeoutSec;
 }
 
 std::string CgiResponseHandler::make_504_response_() {
