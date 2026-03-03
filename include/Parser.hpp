@@ -8,6 +8,8 @@
 
 enum ParserStatus {
   kBadRequest,
+  kForbidden,
+  kNotFound,
   kNotImplemented,
   kUriTooLong,
   kVersionNotSupported,

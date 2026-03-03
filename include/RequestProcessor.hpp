@@ -17,8 +17,11 @@ struct ProcesseorResult {
 };
 
 class RequestProcessor {
- public:
-  static ProcesseorResult process(
+  int status_to_int(ParserStatus status);
+  void handle_error(ProcesseorResult& result, ParserStatus status,
+                    const ServerContext& target_config);
+public:
+  ProcesseorResult process(
       ParserStatus status, const Request& request, const ServerContext& target_config);
 };
 
