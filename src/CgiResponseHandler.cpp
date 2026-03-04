@@ -209,8 +209,10 @@ HandlerStatus CgiResponseHandler::handle_input() {
       cgi_pid_ = -1;
     }
 
-    const std::string resp = cgi_error ? make_502_response_()
-                                       : parse_cgi_output_(cgi_output_);
+    const std::string parsed = parse_cgi_output_(cgi_output_);
+    const bool parsed_is_502 = (parsed.find("HTTP/1.1 502") == 0);
+    const std::string resp = (!parsed_is_502) ? parsed
+                          : (cgi_error ? make_502_response_() : parsed);
 
     ClientHandler* ch = server_.find_client_handler(client_fd_);
     if (ch != NULL) {

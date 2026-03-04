@@ -58,7 +58,10 @@ static std::string method_to_str(HttpMethod method) {
 }
 
 MetaVariables MetaVariables::from_request(const Request& request,
-                                          const std::string& script_path) {
+                                          const std::string& script_path,
+                                          const std::string& server_name,
+                                          const std::string& server_port,
+                                          const std::string& remote_addr) {
   MetaVariables env;
 
   env.request_method_ = method_to_str(request.method);
@@ -103,23 +106,25 @@ MetaVariables MetaVariables::from_request(const Request& request,
   env.meta_variables_["SERVER_PROTOCOL"] = "HTTP/1.1";
   env.meta_variables_["GATEWAY_INTERFACE"] = "CGI/1.1";
   env.meta_variables_["SERVER_SOFTWARE"] = "webserv/1.0";
-  env.meta_variables_["SERVER_NAME"] = "localhost"; //TODO:correct NAME
-  env.meta_variables_["SERVER_PORT"] = "8888"; //TODO:correct PORT
-  //env.meta_variables_["REMOTE_ADDR"] = "..."
+  env.meta_variables_["SERVER_NAME"] = server_name;
+  env.meta_variables_["SERVER_PORT"] = server_port;
+  if (!remote_addr.empty()) {
+    env.meta_variables_["REMOTE_ADDR"] = remote_addr;
+  }
+  env.meta_variables_["REDIRECT_STATUS"] = "200";
 
   for (std::map<std::string, std::string>::const_iterator it =
-           request.headers.begin();
-       it != request.headers.end(); ++it) {
+           request.headers.begin(); it != request.headers.end(); ++it) {
     const std::string& k = it->first;
     const std::string& v = it->second;
-
-    if (k.empty()) continue;
-
-    if (k == "content-type" || k == "content-length") continue;
-
+    if (k.empty()) {
+      continue;
+    }
+    if (k == "content-type" || k == "content-length") {
+      continue;
+    }
     env.http_headers_[to_upper_http_env_key(k)] = v;
   }
-
   return env;
 }
 

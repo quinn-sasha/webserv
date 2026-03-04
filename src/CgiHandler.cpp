@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
+#include <limits.h>   
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
@@ -15,10 +16,11 @@
 #include "Server.hpp"
 #include "CgiResponseHandler.hpp"
 #include "pollfd_utils.hpp"
+#include "string_utils.hpp"
 
 static void cgi_error_exit(const char* func_name, int code) {
   std::cerr << "Error: " << func_name << " " << strerror(errno) << "\n";
-  _exit(code);
+  std::exit(code);
 }
 
 static int set_nonblocking(int fd) {
@@ -32,11 +34,17 @@ static int set_nonblocking(int fd) {
   return 0;
 }
 
-CgiHandler::CgiHandler(const Request& request) 
+CgiHandler::CgiHandler(const Request& request,
+                       const std::string& server_name,
+                       const std::string& server_port,
+                       const std::string& remote_addr)
     : request_(request),
       pipe_in_fd_(-1),
       pipe_out_fd_(-1),
-      cgi_pid_(-1) {}
+      cgi_pid_(-1),
+      server_name_(server_name),
+      server_port_(server_port),
+      remote_addr_(remote_addr) {}
 
 CgiHandler::~CgiHandler() {
 }
@@ -55,20 +63,6 @@ static bool is_executable_regular_file(const std::string& path) {
   return true;
 }
 
-static std::string trim_right_cr_space(const std::string& s) {
-  std::string out = s;
-  while (!out.empty()) {
-    char c = out[out.size() - 1];
-    if (c == '\r' || c == ' ' || c == '\t') {
-      out.erase(out.size() - 1);
-    }
-    else {
-      break;
-    }
-  }
-  return out;
-}
-
 static std::vector<std::string> split_ws(const std::string& s) {
   std::istringstream iss(s);
   std::vector<std::string> toks;
@@ -85,7 +79,7 @@ static std::vector<std::string> shebang_tokens(const std::string& script_path) {
 
   std::string line;
   std::getline(ifs, line);
-  line = trim_right_cr_space(line);
+  line = trim(line, "\t \r");
 
   if (line.size() >= 2 && line[0] == '#' && line[1] == '!') {
     std::string rest = line.substr(2);
@@ -97,38 +91,38 @@ static std::vector<std::string> shebang_tokens(const std::string& script_path) {
   return std::vector<std::string>();
 }
 
+static bool has_extension(const std::string& path, const std::string& ext) {
+  if (path.size() < ext.size()) {
+    return false;
+  }
+  return path.compare(path.size() - ext.size(), ext.size(), ext) == 0;
+}
+
 static CgiHandler::ExecArgv build_exec_argv(const std::string& script_path,
                                            const std::string& script_name) {
   CgiHandler::ExecArgv execargv;
 
-  if (is_executable_regular_file(script_path)) {
-    execargv.file = script_name;          
-    execargv.argv.push_back(script_name); 
+  if (!is_executable_regular_file(script_path)) {
+    return execargv; //空で渡して後で error
+  }
+
+  if (has_extension(script_path, ".php")) {
+    execargv.file = "/usr/bin/php-cgi";
+    execargv.argv.push_back(execargv.file);
+    execargv.argv.push_back(script_name);
     return execargv;
   }
 
   std::vector<std::string> shebang = shebang_tokens(script_path);
   if (!shebang.empty()) {
     execargv.file = shebang[0];
-    execargv.argv = shebang;               
+    execargv.argv = shebang;
     execargv.argv.push_back(script_name);
     return execargv;
   }
 
-  std::size_t dot = script_path.rfind('.');
-  if (dot != std::string::npos) {
-    std::string ext = script_path.substr(dot);
-    if (ext == ".py")       execargv.file = "/usr/bin/python3";
-    else if (ext == ".rb")  execargv.file = "/usr/bin/ruby";
-    else if (ext == ".pl")  execargv.file = "/usr/bin/perl";
-    else if (ext == ".sh")  execargv.file = "/bin/sh";
-  }
-  if (!execargv.file.empty()) {
-    execargv.argv.push_back(execargv.file);     
-    execargv.argv.push_back(script_name);
-    return execargv;
-  }
-
+  execargv.file = "./" + script_name;
+  execargv.argv.push_back(execargv.file);
   return execargv;
 }
 
@@ -144,7 +138,8 @@ void CgiHandler::exec_cgi_child(int pipe_in[2], int pipe_out[2], const std::stri
     cgi_error_exit("dup2(stdout)", -1);
   }
   close(pipe_out[1]);
-
+  
+  // script_path を /cgi-bin/...py/... の py までになるよう Request 側を修正
   std::string script_dir = script_path;
   std::size_t slash = script_dir.rfind('/');
   std::string script_name = script_path;
@@ -156,14 +151,16 @@ void CgiHandler::exec_cgi_child(int pipe_in[2], int pipe_out[2], const std::stri
     }
   }
 
-  MetaVariables env = MetaVariables::from_request(request_, script_path);
+  MetaVariables env = MetaVariables::from_request(request_, script_name,
+                                                  server_name_, server_port_, remote_addr_);
   char** envp = env.build_envp();
 
-  ExecArgv eargv = build_exec_argv(script_path, script_name);
-  if (eargv.file.empty() || eargv.argv.empty()) {
-    errno = ENOEXEC;
-    cgi_error_exit("build_exec_argv", 127);
-  }
+  ExecArgv eargv = build_exec_argv(script_name, script_name);
+
+  // debug
+  // std::cerr << "[cgi] script_path=" << script_path << "\n";
+  // std::cerr << "[cgi] script_name=" << script_name << "\n";
+  // std::cerr << "[cgi] exec file=" << eargv.file << "\n";
 
   std::vector<char*> argv_ptrs;
   argv_ptrs.reserve(eargv.argv.size() + 1);

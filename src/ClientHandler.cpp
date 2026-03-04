@@ -7,6 +7,7 @@
 #include <cerrno>
 #include <cstring>
 #include <iostream>
+#include <cstdlib>  // std::atoi
 
 #include "Config.hpp"
 #include "MonitoredFdHandler.hpp"
@@ -60,7 +61,19 @@ HandlerStatus ClientHandler::handle_input() {
   if (result.next_action == ProcesseorResult::kExecuteCgi) {
     state_ = kExecutingCgi;
 
-    CgiHandler cgi(parser_.get_request());
+     //config の server_name 
+    std::string server_name = "localhost";
+    int listen_port = std::atoi(port_.c_str());
+    const ServerContext& sc = config_.get_config(listen_port, "");
+    for (std::size_t i = 0; i < sc.server_names.size(); ++i) {
+      if (!sc.server_names[i].empty()) {
+        server_name = sc.server_names[i];
+        break;
+      }
+    }
+    const std::string remote_addr = ""; //todo accept の引数で設定
+
+    CgiHandler cgi(parser_.get_request(), server_name, port_, remote_addr);
     if (cgi.execute_cgi(result.script_path) == -1) {
       response_.prepare_error_response(kInternalServerError);
       response_str_ = response_.serialize();
