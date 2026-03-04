@@ -106,10 +106,10 @@ ProcessorResult RequestProcessor::create_autoindex_response(
   }
 
   std::string body = http_constants::kHtmlStart;
-  body += target;
-  body += http_constants::kTitleEnd;
-  body += target;
-  body += http_constants::kHeaderEnd;
+  body.append(target);
+  body.append(http_constants::kTitleEnd);
+  body.append(target);
+  body.append(http_constants::kHeaderEnd);
 
   struct dirent* entry;
   while ((entry = readdir(dir)) != NULL) {
@@ -135,7 +135,7 @@ ProcessorResult RequestProcessor::create_autoindex_response(
   body += http_constants::kHtmlEnd;
 
   result.response.set_body(body);
-  result.response.prepare_success_response();
+  result.response.prepare_success_response(kOk);
   result.next_action = ProcessorResult::kSendResponse;
   return result;
 }
@@ -145,7 +145,7 @@ ProcessorResult RequestProcessor::handle_directory(const std::string& path, cons
   std::string index_file_path = find_index_file(path, lc);
 
   if (!index_file_path.empty()) {
-    return handle_file(index_file_path);
+    return handle_file(index_file_path, target_config);
   }
 
   if (lc.autoindex) {
@@ -155,14 +155,19 @@ ProcessorResult RequestProcessor::handle_directory(const std::string& path, cons
   return handle_error(kForbidden, target_config);
 }
 
-ProcessorResult RequestProcessor::handle_file(const std::string& path) {
+ProcessorResult RequestProcessor::handle_file(const std::string& path, const ServerContext& target_config) {
   ProcessorResult result;
-  //　最終的なphysical_pathを読み込む
-  result.response.fill_from_file(path);
-  // 本来はファイルの種類に応じてContent_Typeをセットする
+  if (!result.response.fill_from_file(path)) {
+    if (errno == ENOENT) {
+      return handle_error(kNotFound, target_config);
+    } else if (errno == EACCES) {
+      return handle_error(kForbidden, target_config);
+    }
+    return handle_error(kInternalServerError, target_config);
+  }
   std::string mime = result.response.get_mime_type(path);
   result.response.add_header("Content-Type", mime);
-  result.response.prepare_success_response();
+  result.response.prepare_success_response(kOk);
   result.next_action = ProcessorResult::kSendResponse;
   return result;
 }
@@ -171,13 +176,14 @@ ProcessorResult RequestProcessor::handle_static_file(const Request& request,
                   const LocationContext& lc, const ServerContext& target_config) {
   std::string physical_path = lc.root + request.target;
   struct stat s;
+
   if (stat(physical_path.c_str(), &s) == -1) {
     return handle_error(errno_to_status(errno), target_config);
   }
   if (S_ISDIR(s.st_mode)) {
     return handle_directory(physical_path, request, lc, target_config);
   } else if (S_ISREG(s.st_mode)) {
-    return handle_file(physical_path);
+    return handle_file(physical_path, target_config);
   }
 
   return handle_error(kForbidden, target_config);

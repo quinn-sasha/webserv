@@ -3,44 +3,86 @@
 #include <string>
 #include <sstream>
 #include <fstream>
+#include <unistd.h>
 
 #include "Parser.hpp"
 #include "string_utils.hpp"
 #include "Config.hpp"
 
-void Response::prepare_error_response(ParserStatus status, const std::string& path) {
-  switch (status) {
-    case kBadRequest:
-      status_code_ = "400";
-    case kNotFound:
-      status_code_ = "404";
-      break;
-    case kNotImplemented:
-      status_code_ = "501";
-      break;
-    case kUriTooLong:
-      status_code_ = "414";
-      break;
-    case kVersionNotSupported:
-      status_code_ = "505";
-      break;
-    // Method Not Allowed isn't checked here
-    default:
-      status_code_ = "500";
+namespace http_error_constants {
+  const char* kErrorHtmlStart = "<html><head><title>";
+  const char* kErrorTitleEnd  = "</title></head><body><center><h1>";
+  const char* kErrorHeaderEnd = "</h1></center><hr><center>webserv</center></body></html>";
+}
+
+namespace http_redirect_constants {
+  const char* kRedirectHtmlStart  = "<html><head><title>Moved</title></head><body><h1>";
+  const char* kRedirectBodyMiddle = "</h1><p>The document has moved <a href=\"";
+  const char* kRedirectBodyEnd    = "\">here</a>.</p></body></html>";
+}
+
+std::string Response::get_reason_phrase(int code) {
+  switch (code) {
+    case 200: return "OK";
+    case 301: return "Moved Permanently";
+    case 400: return "Bad Request";
+    case 403: return "Forbidden";
+    case 404: return "Not Found";
+    case 405: return "Method Not Allowed";
+    case 413: return "Content Too Large";
+    case 414: return "URI Too Long";
+    case 500: return "Internal Server Error";
+    case 501: return "Not Implemented";
+    case 505: return "HTTP Version Not Supported";
+    default:  return "Internal Server Error";
   }
-  // TODO: write headers
-  // TODO: write body
+}
+
+void Response::prepare_error_response(ParserStatus status, const std::string& path) {
+  int code = static_cast<int>(status);
+  status_code_ = int_to_string(code);
+  reason_phrase_ = get_reason_phrase(code);
+
+  if (!path.empty() && access(path.c_str(), R_OK) == 0) {
+    fill_from_file(path);
+  } else {
+    std::string message = status_code_ + " " + reason_phrase_;
+
+    std::string html = http_error_constants::kErrorHtmlStart;
+    html.append(message);
+    html.append(http_error_constants::kErrorTitleEnd);
+    html.append(message);
+    html.append(http_error_constants::kErrorHeaderEnd);
+
+    set_body(html);
+  }
+  add_header("Content-Type", "text/html");
 }
 
 // TODO: add arguments
-void Response::prepare_success_response() { status_code_ = "200"; }
+void Response::prepare_success_response(ParserStatus status) {
+  int code = static_cast<int>(status);
+  status_code_ = int_to_string(code);
+  reason_phrase_ = get_reason_phrase(status);
+}
 
 void Response::prepare_redirect_response(int status, const std::string& redirect_url) {
   status_code_ = int_to_string(status);
+  reason_phrase_ = get_reason_phrase(status);
 
-  headers_["Location"] = redirect_url;
+  add_header("Location", redirect_url);
+  add_header("Content-Type", "text/html");
 
-  //TODO: write body
+  //TODO: write body モダンなブラウザはLocationヘッダーさえあれば自動で移動してくれる
+  std::string html = http_redirect_constants::kRedirectHtmlStart;
+  html.append(status_code_);
+  html.append(" ");
+  html.append(reason_phrase_);
+  html.append(http_redirect_constants::kRedirectBodyMiddle);
+  html.append(redirect_url);
+  html.append(http_redirect_constants::kRedirectBodyEnd);
+
+  set_body(html);
 }
 
 std::string Response::serialize() const {
@@ -51,7 +93,9 @@ std::string Response::serialize() const {
     response.append("HTTP/1.1 ");
   }
   response.append(status_code_);
-  response.append(" \r\n");  // No reason-phrase
+  response.append(" ");
+  response.append(reason_phrase_);
+  response.append("\r\n");  // No reason-phrase
   // TODO:write header into string
   for (std::map<std::string, std::string>::const_iterator it = headers_.begin();
       it != headers_.end(); ++it) {
@@ -78,16 +122,16 @@ void Response::add_header(const std::string& key, const std::string& value) {
   headers_[key] = value;
 }
 
-void Response::fill_from_file(const std::string& path) {
+bool Response::fill_from_file(const std::string& path) {
   std::ifstream ifs(path.c_str(), std::ios::binary);
   if (!ifs) {
-    //開けなかったときのエラーハンドリング
-    return;
+    return false;
   }
 
   std::string content((std::istreambuf_iterator<char>(ifs)),
                        std::istreambuf_iterator<char>());
   set_body(content);
+  return true;
 }
 
 std::string Response::get_mime_type(const std::string& path) {

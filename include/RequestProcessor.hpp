@@ -26,7 +26,7 @@ class RequestProcessor {
                                                             const std::string& target);
   static ProcessorResult handle_directory(const std::string& path, const Request& request,
                                  const LocationContext& lc, const ServerContext& target_config);
-  static ProcessorResult handle_file(const std::string& path);
+  static ProcessorResult handle_file(const std::string& path, const ServerContext& target_config);
   static ProcessorResult handle_static_file(const Request& request,
                                              const LocationContext& lc,
                                              const ServerContext& target_config);

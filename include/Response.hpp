@@ -6,19 +6,33 @@
 
 #include "Parser.hpp"
 
+namespace http_error_constants {
+  extern const char* kErrorHtmlStart;
+  extern const char* kErrorTitleEnd;
+  extern const char* kErrorHeaderEnd;
+}
+
+namespace http_redirect_contants {
+  const char* kRedirectHtmlStart;
+  const char* kRedirectBodyMiddle;
+  const char* kRedirectBodyEnd;
+}
+
 class Response {
   static const HttpVersion version_ = kHttp11;
   std::string status_code_;
+  std::string reason_phrase_;
   std::map<std::string, std::string> headers_;
   std::string body_;
 
  public:
   void prepare_error_response(ParserStatus status, const std::string& path);
-  void prepare_success_response();  // TODO: add arguments
+  void prepare_success_response(ParserStatus status);  // TODO: add arguments
   void prepare_redirect_response(int status, const std::string& redirect_url);
   void set_body(const std::string& body);
   void add_header(const std::string& key, const std::string& value);
-  void fill_from_file(const std::string& path);
+  std::string get_reason_phrase(int code);
+  bool fill_from_file(const std::string& path);
   std::string get_mime_type(const std::string& path);
   std::string serialize() const;
 };
