@@ -53,8 +53,16 @@ std::string Response::serialize() const {
   response.append(status_code_);
   response.append(" \r\n");  // No reason-phrase
   // TODO:write header into string
+  for (std::map<std::string, std::string>::const_iterator it = headers_.begin();
+      it != headers_.end(); ++it) {
+    response.append(it->first);
+    response.append(": ");
+    response.append(it->second);
+    response.append("\r\n");
+  }
   response.append("\r\n");  // End of header
   // write body into string
+  response.append(body_);
   return response;
 }
 

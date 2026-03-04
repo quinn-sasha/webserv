@@ -7,16 +7,17 @@
 #include <string>
 
 enum ParserStatus {
-  kBadRequest,
-  kForbidden,
-  kNotFound,
-  kNotImplemented,
-  kUriTooLong,
-  kVersionNotSupported,
-  kMethodNotAllowed,
-  kContentTooLarge,
-  kRequestHeaderFieldsTooLarge,
-  kInternalServerError,
+  kOk = 200,
+  kBadRequest = 400,
+  kForbidden = 403,
+  kNotFound = 404,
+  kMethodNotAllowed = 405,
+  kContentTooLarge = 413,
+  kUriTooLong = 414,
+  kRequestHeaderFieldsTooLarge = 431,
+  kInternalServerError = 500,
+  kNotImplemented = 501,
+  kVersionNotSupported = 505,
   // Custom status used in Parser class
   kParseContinue,
   kParseFinished,
@@ -49,6 +50,13 @@ enum ChunkedState {
   kParsingCrlf,
   kParsingTrailer,
 };
+
+namespace http_constants {
+  extern const char* kHtmlStart;
+  extern const char* kTitleEnd;
+  extern const char* kHeaderEnd;
+  extern const char* kHtmlEnd;
+}
 
 struct ChunkedData {
   ChunkedState state;

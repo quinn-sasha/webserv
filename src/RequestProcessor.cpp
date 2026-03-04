@@ -6,13 +6,189 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
-// エラーかどうかだけを判定して、status code を書き込み返す（一時的な実装）
-ProcesseorResult RequestProcessor::process(
-    ParserStatus status, const Request& request, const ServerContext& target_config) {
-  ProcesseorResult result;
-  if (status != kParseFinished) {
-    handle_error(result, status, target_config);
+namespace http_constants {
+  const char* kHtmlStart    = "<html><head><title>Index of ";
+  const char* kTitleEnd     = "</title></head><body><h1>Index of ";
+  const char* kHeaderEnd    = "</h1><hr><pre>";
+  const char* kHtmlEnd      = "</pre><hr></body></html>";
+}
+
+ProcessorResult RequestProcessor::handle_error(ParserStatus status,
+                                    const ServerContext& target_config) {
+  ProcessorResult result;
+  std::string error_page_path = "";
+
+  if (target_config.error_pages.count(status)) {
+    error_page_path = target_config.error_pages.at(status);
+  }
+
+  result.response.prepare_error_response(status, error_page_path);
+  result.next_action = ProcessorResult::kSendResponse;
+
+  return result;
+}
+
+ProcessorResult RequestProcessor::handle_redirect(const LocationContext& lc) {
+  ProcessorResult result;
+
+  result.response.prepare_redirect_response(lc.redirect_status_code, lc.redirect_url);
+  result.next_action = ProcessorResult::kSendResponse;
+  return result;
+}
+
+bool RequestProcessor::is_method_allowed(HttpMethod method, const LocationContext& lc) {
+  std::string request_method = method_to_str(method);
+  for (size_t i = 0; i < lc.allow_methods.size(); ++i) {
+    if (request_method == lc.allow_methods[i]) {
+      return true;
+    }
+  }
+  return false;
+}
+
+ProcessorResult RequestProcessor::handle_cgi(const Request& request) {
+  ProcessorResult result;
+  result.next_action = ProcessorResult::kExecuteCgi;
+  if (!request.target.empty() && request.target[0] == '/') {
+    result.script_path = request.target.substr(1); // /path/cgi-bin/script.py -> path/cgi-bin/script.py
+  }
+  else {
+    result.script_path = request.target;
+  }
+  return result;
+}
+
+ParserStatus RequestProcessor::errno_to_status(int err_num) {
+  switch (err_num) {
+    case ENOENT:
+    case ENOTDIR:
+      return kNotFound;
+
+    case EACCES:
+      return kForbidden;
+
+    case ENAMETOOLONG:
+      return kUriTooLong;
+
+    default:
+      return kInternalServerError;
+  }
+}
+
+std::string RequestProcessor::find_index_file(const std::string& directory_path, const LocationContext& lc) {
+  for (std::vector<std::string>::const_iterator it = lc.index.begin();
+        it != lc.index.end(); ++it) {
+  // physical_pathの末尾に/が付いているかどうか
+    std::string test_path = directory_path;
+    if (!test_path.empty() && test_path[test_path.length() - 1] != '/' &&
+        !it->empty() && (*it)[0] != '/') {
+      test_path.append("/");
+    }
+    test_path.append(*it);
+
+    struct stat test_s;
+    if (stat(test_path.c_str(), &test_s) == 0 && S_ISREG(test_s.st_mode)) {
+      return test_path;
+    }
+  }
+  return "";
+}
+
+ProcessorResult RequestProcessor::create_autoindex_response(
+  const std::string& path, const std::string& target) {
+
+  ProcessorResult result;
+  DIR* dir = opendir(path.c_str());
+  if (dir == NULL) {
+    result.response.prepare_error_response(kForbidden, "");
+    result.next_action = ProcessorResult::kSendResponse;
     return result;
+  }
+
+  std::string body = http_constants::kHtmlStart;
+  body += target;
+  body += http_constants::kTitleEnd;
+  body += target;
+  body += http_constants::kHeaderEnd;
+
+  struct dirent* entry;
+  while ((entry = readdir(dir)) != NULL) {
+    std::string name = entry->d_name;
+    if (name == ".") {
+      continue;
+    }
+    std::string link = name;
+    struct stat ent_s;
+
+    std::string full_ent_path = path;
+    if (!full_ent_path.empty() && full_ent_path[full_ent_path.length() - 1] != '/') {
+      full_ent_path += "/";
+    }
+    full_ent_path += name;
+    if (stat(full_ent_path.c_str(), &ent_s) == 0 && S_ISDIR(ent_s.st_mode)) {
+      link += "/";
+    }
+    body += "<a href=\"" + link + "\">" + link + "</a>\n";
+  }
+  closedir(dir);
+
+  body += http_constants::kHtmlEnd;
+
+  result.response.set_body(body);
+  result.response.prepare_success_response();
+  result.next_action = ProcessorResult::kSendResponse;
+  return result;
+}
+
+ProcessorResult RequestProcessor::handle_directory(const std::string& path, const Request& request,
+                                 const LocationContext& lc, const ServerContext& target_config) {
+  std::string index_file_path = find_index_file(path, lc);
+
+  if (!index_file_path.empty()) {
+    return handle_file(index_file_path);
+  }
+
+  if (lc.autoindex) {
+    return create_autoindex_response(path, request.target);
+  }
+
+  return handle_error(kForbidden, target_config);
+}
+
+ProcessorResult RequestProcessor::handle_file(const std::string& path) {
+  ProcessorResult result;
+  //　最終的なphysical_pathを読み込む
+  result.response.fill_from_file(path);
+  // 本来はファイルの種類に応じてContent_Typeをセットする
+  std::string mime = result.response.get_mime_type(path);
+  result.response.add_header("Content-Type", mime);
+  result.response.prepare_success_response();
+  result.next_action = ProcessorResult::kSendResponse;
+  return result;
+}
+
+ProcessorResult RequestProcessor::handle_static_file(const Request& request,
+                  const LocationContext& lc, const ServerContext& target_config) {
+  std::string physical_path = lc.root + request.target;
+  struct stat s;
+  if (stat(physical_path.c_str(), &s) == -1) {
+    return handle_error(errno_to_status(errno), target_config);
+  }
+  if (S_ISDIR(s.st_mode)) {
+    return handle_directory(physical_path, request, lc, target_config);
+  } else if (S_ISREG(s.st_mode)) {
+    return handle_file(physical_path);
+  }
+
+  return handle_error(kForbidden, target_config);
+}
+
+// エラーかどうかだけを判定して、status code を書き込み返す（一時的な実装）
+ProcessorResult RequestProcessor::process(
+    ParserStatus status, const Request& request, const ServerContext& target_config) {
+  ProcessorResult result;
+  if (status != kParseFinished) {
+    return handle_error(status, target_config);
   }
   // construct URI
 try {
@@ -21,156 +197,20 @@ try {
 
   // リダイレクト処理
   if (lc.redirect_status_code != -1) {
-    result.response.prepare_redirect_response(lc.redirect_status_code, lc.redirect_url);
-    result.next_action = ProcesseorResult::kSendResponse;
-    return result;
+    return handle_redirect(lc);
   }
 
-  bool method_allowed = false;
-  std::string request_to_str = method_to_str(request.method);
-  for (size_t i = 0; i < lc.allow_methods.size(); ++i) {
-    if (request_to_str == lc.allow_methods[i]) {
-      method_allowed = true;
-      break;
-    }
+  if (!is_method_allowed(request.method, lc)) {
+    return handle_error(kMethodNotAllowed, target_config);
   }
 
-  if (!method_allowed) {
-    // error_pageのパスを渡す処理も必要！
-    handle_error(result, kMethodNotAllowed, target_config);
-    return result;
-  }
-
-  // CGI?
+  // CGI? 拡張子の判定する
   if (request.target.find("/cgi-bin/") != std::string::npos) {
-    result.next_action = ProcesseorResult::kExecuteCgi;
-    result.script_path = request.target.substr(1); // /path/cgi-bin/script.py -> path/cgi-bin/script.py
-    return result;
+    return handle_cgi(request);
   }
-
-  // 通常ファイルの処理
-  // TODO: physical_pathを使ってファイルを開き、レスポンスを作成する。
-  // ファイルの存在確認　physical_pathが指すファイルが実際に存在するか？stat()
-  // ディレクトリの場合　lc.indexを探すか、lc.autoindexがonであればファイルリストを作成する処理が必要
-  // ファイル読み込み　std::ifstreamなどでファイル内容を読み込みresult.responseのbodyにセットする
-  // 物理パスの構築
-  std::string physical_path = lc.root + request.target;
-  struct stat s;
-  if (stat(physical_path.c_str(), &s) == -1) {
-    if (errno == ENOENT) {
-      handle_error(result, kNotFound, target_config);
-    } else if (errno == EACCES) {
-      handle_error(result, kForbidden, target_config);
-    } else {
-      handle_error(result, kBadRequest, target_config);
-    }
-    return result;
-  }
-
-  if (S_ISDIR(s.st_mode)) {
-    bool index_found = false;
-    // ファイルを探す処理 見つかればphysical_pathを更新して続行、なければautoindex確認
-    for (std::vector<std::string>::const_iterator it = lc.index.begin();
-          it != lc.index.end(); ++it) {
-            // physical_pathの末尾に/が付いているかどうか
-      std::string test_path = physical_path;
-      if (!test_path.empty() && test_path[test_path.length() - 1] != '/' &&
-          !it->empty() && (*it)[0] != '/') {
-        test_path.append("/");
-      }
-      test_path.append(*it);
-
-      struct stat test_s;
-      if (stat(test_path.c_str(), &test_s) == 0 && S_ISREG(test_s.st_mode)) {
-        physical_path = test_path;
-        index_found = true;
-        break;
-      }
-    }
-
-    if (!index_found) {
-      if (!lc.autoindex) {
-        handle_error(result, kForbidden, target_config);
-        return result;
-      }
-      //ディレクトリ内のファイルをすべて表示する
-      //ディレクトリを開いてopendir()中身を取得readdir()して、HTMLを組み立てる 生成した文字列をresult.response.set_body()
-      //Response::set_bodyの実装
-      //Content_type: autoindexの結果はHTML　レスポンスヘッダーにContent-Type: text/htmlを含める
-      DIR* dir = opendir(physical_path.c_str());
-      if (dir == NULL) {
-        handle_error(result, kForbidden, target_config);
-        return result;
-      }
-      std::string body = "<html><head><title>Index of " + request.target + "</title></head><body>";
-      body += "<h1>Index of " + request.target + "</h1><hr><pre>";
-
-      struct dirent* entry;
-      while ((entry = readdir(dir)) != NULL) {
-        std::string name = entry->d_name;
-        if (name == ".") {
-          continue;
-        }
-        std::string link = name;
-        struct stat ent_s;
-        std::string full_ent_path = physical_path;
-        if (!full_ent_path.empty() && full_ent_path[full_ent_path.length() - 1] != '/') {
-          full_ent_path += "/";
-        }
-        full_ent_path += name;
-        if (stat(full_ent_path.c_str(), &ent_s) == 0 && S_ISDIR(ent_s.st_mode)) {
-          link += "/";
-        }
-        body += "<a href=\"" + link + "\">" + link + "</a>\n";
-      }
-      closedir(dir);
-      body += "</pre><hr></body></html>";
-      result.response.set_body(body);
-      result.response.prepare_success_response();
-      result.next_action = ProcesseorResult::kSendResponse;
-      return result;
-    }
-  }
-  //　最終的なphysical_pathを読み込む
-  result.response.fill_from_file(physical_path);
-  // 本来はファイルの種類に応じてContent_Typeをセットする
-  std::string mime = get_mime_type(physical_path);
-  result.response.add_header("Content-Type", mime);
-  result.response.prepare_success_response();
-  result.next_action = ProcesseorResult::kSendResponse;
-  return result;
+  return handle_static_file(request, lc, target_config);
  } catch (const std::exception& e) {
 // if not CGI, do some process like fetching file
-  handle_error(result, kBadRequest, target_config);
-  return result;
+  return handle_error(kNotFound, target_config);
  }
-}
-
-int RequestProcessor::status_to_int(ParserStatus status) {
-  switch (status) {
-    case kBadRequest:                 return 400;
-    case kForbidden:                  return 403;
-    case kNotFound:                   return 404;
-    case kUriTooLong:                 return 414;
-    case kVersionNotSupported:        return 505;
-    case kNotImplemented:             return 501;
-    case kContentTooLarge:            return 413;
-    case kRequestHeaderFieldsTooLarge: return 431;
-    case kMethodNotAllowed:           return 405;
-    case kInternalServerError:        return 500;
-    // default:                          return ;
-  }
-}
-
-void RequestProcessor::handle_error(ProcesseorResult& result, ParserStatus status,
-                                    const ServerContext& target_config) {
-  int code = status_to_int(status);
-  std::string error_page_path = "";
-
-  if (target_config.error_pages.count(code)) {
-    error_page_path = target_config.error_pages.at(code);
-  }
-
-  result.response.prepare_error_response(status, error_page_path);
-  result.next_action = ProcesseorResult::kSendResponse;
 }

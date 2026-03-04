@@ -6,16 +6,6 @@
 
 #include "Parser.hpp"
 
-enum extension {
-  HTML,
-  HTM,
-  CSS,
-  JS,
-  JPG,
-  PNG,
-  TXT
-};
-
 class Response {
   static const HttpVersion version_ = kHttp11;
   std::string status_code_;

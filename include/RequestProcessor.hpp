@@ -5,7 +5,7 @@
 #include "Response.hpp"
 #include "Config.hpp"
 
-struct ProcesseorResult {
+struct ProcessorResult {
   enum Action {
     kSendResponse,
     kExecuteCgi,
@@ -17,11 +17,28 @@ struct ProcesseorResult {
 };
 
 class RequestProcessor {
-  int status_to_int(ParserStatus status);
-  void handle_error(ProcesseorResult& result, ParserStatus status,
+  static ProcessorResult handle_error(ParserStatus status,
                     const ServerContext& target_config);
+  static ProcessorResult handle_redirect(const LocationContext& lc);
+  static ProcessorResult handle_cgi(const Request& request);
+  static std::string find_index_file(const std::string& directory_path, const LocationContext& lc);
+  static ProcessorResult create_autoindex_response(const std::string& path,
+                                                            const std::string& target);
+  static ProcessorResult handle_directory(const std::string& path, const Request& request,
+                                 const LocationContext& lc, const ServerContext& target_config);
+  static ProcessorResult handle_file(const std::string& path);
+  static ProcessorResult handle_static_file(const Request& request,
+                                             const LocationContext& lc,
+                                             const ServerContext& target_config);
+  static bool is_method_allowed(HttpMethod method, const LocationContext& lc);
+  static std::string find_index_file(const std::string& directory_path,
+                                     const LocationContext& lc);
+  static ProcessorResult create_autoindex_response(const std::string& path,
+                                                    const std::string& target);
+  static int status_to_int(ParserStatus status);
+  static ParserStatus errno_to_status(int err_num);
 public:
-  ProcesseorResult process(
+  static ProcessorResult process(
       ParserStatus status, const Request& request, const ServerContext& target_config);
 };
 
