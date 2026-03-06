@@ -1,6 +1,7 @@
 #include "parse_location_directive.hpp"
 
 #include "config_utils.hpp"
+#include "string_utils.hpp"
 
 void parse_location_root_directive(const std::vector<std::string>& tokens,
                                    size_t token_index, LocationContext& lc) {
@@ -56,7 +57,7 @@ void parse_return_directive(const std::vector<std::string>& tokens,
   if (val != ConfigLimits::kMovedPermanently && val != ConfigLimits::kFound &&
       val != ConfigLimits::kSeeOther && val != ConfigLimits::kTemporaryRedirect &&
       val != ConfigLimits::kPermanentRedirect ) {
-    error_exit("Unsupported redirect status: " + std::to_string(val));
+    error_exit("Unsupported redirect status: " + int_to_string(val));
   }
   lc.redirect_status_code = static_cast<int>(val);
 

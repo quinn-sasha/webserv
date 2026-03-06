@@ -2,6 +2,7 @@
 #define INCLUDE_CONFIG_UTILS_HPP_
 
 #include <vector>
+#include <string>
 
 void error_exit(const std::string& msg);
 void check_ip_format(const std::string& ip);
@@ -10,7 +11,7 @@ void set_single_string(const std::vector<std::string>& tokens,
                        size_t token_index, std::string& field,
                        const std::string& directive_name);
 void set_vector_string(const std::vector<std::string>& tokens,
-                       size_t token_index, std::vector<std::string> field,
+                       size_t token_index, std::vector<std::string>& field,
                        const std::string& directive_name);
 
 #endif

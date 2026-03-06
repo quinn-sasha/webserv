@@ -6,7 +6,7 @@
 /*   By: ikota <ikota@student.42tokyo.jp>           +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/24 14:48:42 by ikota             #+#    #+#             */
-/*   Updated: 2026/02/26 16:27:30 by ikota            ###   ########.fr       */
+/*   Updated: 2026/03/06 15:45:15 by ikota            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -113,6 +113,7 @@ typedef void (*LocationParser)(const std::vector<std::string>&, size_t,
 
 void parse_location_directive(const std::vector<std::string>& tokens,
                               size_t token_index, ServerContext& sc) {
+  (void)sc;
   LocationContext lc;
   lc.is_exact_match = false;
 

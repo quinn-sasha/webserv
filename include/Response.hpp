@@ -6,18 +6,6 @@
 
 #include "Parser.hpp"
 
-namespace http_error_constants {
-  extern const char* kErrorHtmlStart;
-  extern const char* kErrorTitleEnd;
-  extern const char* kErrorHeaderEnd;
-}
-
-namespace http_redirect_contants {
-  const char* kRedirectHtmlStart;
-  const char* kRedirectBodyMiddle;
-  const char* kRedirectBodyEnd;
-}
-
 class Response {
   static const HttpVersion version_ = kHttp11;
   std::string status_code_;

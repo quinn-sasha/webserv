@@ -2,6 +2,9 @@
 
 #include <iostream>
 #include <sstream>
+#include <cstdlib>
+#include <algorithm>
+#include <cerrno>
 
 void error_exit(const std::string& msg) {
   std::cerr << "Error: " << msg << std::endl;
@@ -15,7 +18,7 @@ void check_ip_format(const std::string& ip) {
   std::string segment;
   int count = 0;
 
-  if (std::count(ip.begin(), ip.end(), ".") != 3) {
+  if (std::count(ip.begin(), ip.end(), '.') != 3) {
     error_exit("Invalid IP format: '" + ip + "' (must bi x.x.x.x)");
   }
 

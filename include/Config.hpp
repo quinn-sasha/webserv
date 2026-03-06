@@ -3,6 +3,7 @@
 
 #include <map>
 #include <vector>
+#include <string>
 
 struct ConfigLimits {
   static const long kPortMin = 0;

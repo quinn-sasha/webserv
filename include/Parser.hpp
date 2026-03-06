@@ -5,6 +5,7 @@
 #include <list>
 #include <map>
 #include <string>
+#include <sys/types.h>
 
 enum ParserStatus {
   kOk = 200,
@@ -50,13 +51,6 @@ enum ChunkedState {
   kParsingCrlf,
   kParsingTrailer,
 };
-
-namespace http_constants {
-  extern const char* kHtmlStart;
-  extern const char* kTitleEnd;
-  extern const char* kHeaderEnd;
-  extern const char* kHtmlEnd;
-}
 
 struct ChunkedData {
   ChunkedState state;

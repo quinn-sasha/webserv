@@ -95,7 +95,7 @@ std::string Response::serialize() const {
   response.append(status_code_);
   response.append(" ");
   response.append(reason_phrase_);
-  response.append("\r\n");  // No reason-phrase
+  response.append("\r\n");
   // TODO:write header into string
   for (std::map<std::string, std::string>::const_iterator it = headers_.begin();
       it != headers_.end(); ++it) {

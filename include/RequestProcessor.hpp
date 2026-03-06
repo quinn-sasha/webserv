@@ -5,6 +5,8 @@
 #include "Response.hpp"
 #include "Config.hpp"
 
+#include <cerrno>
+
 struct ProcessorResult {
   enum Action {
     kSendResponse,
@@ -31,10 +33,6 @@ class RequestProcessor {
                                              const LocationContext& lc,
                                              const ServerContext& target_config);
   static bool is_method_allowed(HttpMethod method, const LocationContext& lc);
-  static std::string find_index_file(const std::string& directory_path,
-                                     const LocationContext& lc);
-  static ProcessorResult create_autoindex_response(const std::string& path,
-                                                    const std::string& target);
   static int status_to_int(ParserStatus status);
   static ParserStatus errno_to_status(int err_num);
 public:

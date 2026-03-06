@@ -4,6 +4,8 @@
 #include <list>
 #include <string>
 
+#include "Parser.hpp"
+
 std::string to_lower(std::string s);
 
 std::list<std::string> split_string(const std::string& target,
