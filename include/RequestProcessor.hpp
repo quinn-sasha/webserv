@@ -6,6 +6,7 @@
 #include "Config.hpp"
 
 #include <cerrno>
+#include <iostream>
 
 struct ProcessorResult {
   enum Action {

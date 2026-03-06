@@ -175,6 +175,7 @@ ProcessorResult RequestProcessor::handle_file(const std::string& path, const Ser
 ProcessorResult RequestProcessor::handle_static_file(const Request& request,
                   const LocationContext& lc, const ServerContext& target_config) {
   std::string physical_path = lc.root + request.target;
+  std::cout << "DEBUG: Trying to open file: [" << physical_path << "]" << std::endl;
   struct stat s;
 
   if (stat(physical_path.c_str(), &s) == -1) {

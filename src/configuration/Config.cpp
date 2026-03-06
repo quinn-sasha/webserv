@@ -56,7 +56,11 @@ std::vector<std::string> Config::tokenize(const std::string& content) {
 
 static void finalize_location_context(ServerContext& sc, LocationContext& lc) {
   if (lc.root.empty()) {
-    lc.root = sc.server_root;
+    if (sc.server_root.empty()) {
+      lc.root = "./html"; //そもそもここもこれでいいのか？？
+    } else {
+      lc.root = sc.server_root;
+    }
   }
 
   if (lc.index.empty()) {
@@ -97,10 +101,11 @@ static void finalize_server_context(ServerContext& sc) {
 }
 
 void Config::parse_server(const std::vector<std::string>& tokens,
-                          size_t token_index) {
-  if (token_index >= tokens.size() || tokens[token_index++] != "{") {
+                          size_t& token_index) {
+  if (token_index >= tokens.size() || tokens[token_index] != "{") {
     error_exit("Expected '{' after server");
   }
+  token_index++;
   static std::map<std::string, ServerParser> s_parsers;
   if (s_parsers.empty()) {
     s_parsers["listen"] = parse_listen_directive;
@@ -118,12 +123,11 @@ void Config::parse_server(const std::vector<std::string>& tokens,
       servers_.push_back(sc);
       return;
     }
-    std::string key = tokens[token_index];
+    std::string key = tokens[token_index++];
     if (s_parsers.find(key) == s_parsers.end()) {
       error_exit("Unknown directive: " + key);
     }
     s_parsers[key](tokens, token_index, sc);
-    token_index++;
   }
   error_exit("Unexpected end of file: missing '}' in server block");
 }
