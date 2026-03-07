@@ -117,5 +117,15 @@ int main(int argc, char **argv) {
     std::cout << processor.process(kParseFinished, req, sc).response.serialize() << std::endl;
   }
 
+  // --- Case 3: error_page (Port 8083) ---
+  {
+    std::cout << "\n--- Test: 404 error_page redirect (Port 8083) ---" << std::endl;
+    const ServerContext& sc = config_parser.get_config(8083, "error.test");
+    Request req;
+    req.method = kGet;
+    req.target = "/nothing";
+    std::cout << processor.process(kParseFinished, req, sc).response.serialize() << std::endl;
+  }
+
   return 0;
 }

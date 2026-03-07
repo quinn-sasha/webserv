@@ -16,13 +16,26 @@ namespace http_constants {
 ProcessorResult RequestProcessor::handle_error(ParserStatus status,
                                     const ServerContext& target_config) {
   ProcessorResult result;
-  std::string error_page_path = "";
+  std::string error_page_full_path = "";
 
   if (target_config.error_pages.count(status)) {
-    error_page_path = target_config.error_pages.at(status);
-  }
+    std::string error_uri = target_config.error_pages.at(status);
+    std::string root = "";
+    try {
+      const LocationContext& error_lc = target_config.get_matching_location(error_uri);
+      if (error_lc.root.empty()) {
+        root = target_config.server_root;
+      } else {
+        root = error_lc.root;
+      }
 
-  result.response.prepare_error_response(status, error_page_path);
+      if (error_uri[0] != '/') {
+        error_uri.insert(0, "/");
+      }
+      error_page_full_path = root + error_uri;
+    } catch (...) {}
+  }
+  result.response.prepare_error_response(status, error_page_full_path);
   result.next_action = ProcessorResult::kSendResponse;
 
   return result;
