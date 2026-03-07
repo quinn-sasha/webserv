@@ -22,6 +22,7 @@ struct LocationContext {
   std::string path;
   std::string root;
   std::vector<std::string> allow_methods;
+  long client_max_body_size;
   std::vector<std::string> index;
   bool is_exact_match;
   bool autoindex;
@@ -34,6 +35,7 @@ struct LocationContext {
   LocationContext()
       : path("/"),
         root(""),
+        client_max_body_size(-1),
         is_exact_match(false),
         autoindex(false),
         redirect_status_code(-1) {}

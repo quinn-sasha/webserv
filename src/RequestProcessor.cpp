@@ -5,6 +5,7 @@
 #include "string_utils.hpp"
 #include <sys/stat.h>
 #include <dirent.h>
+#include <unistd.h>
 
 namespace http_constants {
   const char* kHtmlStart    = "<html><head><title>Index of ";
@@ -49,6 +50,15 @@ ProcessorResult RequestProcessor::handle_redirect(const LocationContext& lc) {
   return result;
 }
 
+static std::string method_to_str(HttpMethod method) {
+  switch (method) {
+    case kGet:    return "get";
+    case kPost:   return "post";
+    case kDelete: return "delete";
+    default:      return "unknown";
+  }
+}
+
 bool RequestProcessor::is_method_allowed(HttpMethod method, const LocationContext& lc) {
   std::string request_method = method_to_str(method);
   for (size_t i = 0; i < lc.allow_methods.size(); ++i) {
@@ -59,14 +69,43 @@ bool RequestProcessor::is_method_allowed(HttpMethod method, const LocationContex
   return false;
 }
 
-ProcessorResult RequestProcessor::handle_cgi(const Request& request) {
+ProcessorResult RequestProcessor::handle_cgi(const std::string& path_only,
+                                             const std::string& query_string,
+                                             const LocationContext& lc,
+                                             const ServerContext& target_config) {
   ProcessorResult result;
   result.next_action = ProcessorResult::kExecuteCgi;
-  if (!request.target.empty() && request.target[0] == '/') {
-    result.script_path = request.target.substr(1); // /path/cgi-bin/script.py -> path/cgi-bin/script.py
+  result.query_string = query_string;
+
+  std::string root;
+  if (!lc.root.empty()) {
+    root = lc.root;
+  } else if (!target_config.server_root.empty()) {
+    root = target_config.server_root;
+  } else {
+    root = "./html";
   }
-  else {
-    result.script_path = request.target;
+
+  std::string script_uri = path_only;
+  if (!script_uri.empty() && script_uri[0] == '/') {
+    script_uri = script_uri.substr(1);
+  }
+
+  result.script_path = root + "/" + script_uri;
+  result.cgi_path = lc.cgi_path;
+
+  if (result.cgi_path.empty()) {
+    return handle_error(kInternalServerError, target_config);
+  }
+
+  if (access(result.script_path.c_str(), R_OK) != 0) {
+    if (errno == ENOENT) {
+        return handle_error(kNotFound, target_config);
+    } else if (errno == EACCES) {
+        return handle_error(kForbidden, target_config);
+    } else {
+        return handle_error(kInternalServerError, target_config);
+    }
   }
   return result;
 }
@@ -91,7 +130,6 @@ ParserStatus RequestProcessor::errno_to_status(int err_num) {
 std::string RequestProcessor::find_index_file(const std::string& directory_path, const LocationContext& lc) {
   for (std::vector<std::string>::const_iterator it = lc.index.begin();
         it != lc.index.end(); ++it) {
-  // physical_pathの末尾に/が付いているかどうか
     std::string test_path = directory_path;
     if (!test_path.empty() && test_path[test_path.length() - 1] != '/' &&
         !it->empty() && (*it)[0] != '/') {
@@ -224,9 +262,30 @@ try {
     return handle_error(kMethodNotAllowed, target_config);
   }
 
-  // CGI? 拡張子の判定する
-  if (request.target.find("/cgi-bin/") != std::string::npos) {
-    return handle_cgi(request);
+  long client_max_body_size;
+  if (lc.client_max_body_size != -1) {
+    client_max_body_size = lc.client_max_body_size;
+  } else {
+    client_max_body_size = target_config.client_max_body_size;
+  }
+
+  if (request.body.size() > client_max_body_size) {
+   return handle_error(kContentTooLarge, target_config);
+  }
+
+  std::string path_only = request.target;
+  std::string query_string = "";
+  size_t q_pos = path_only.find("?");
+  if (q_pos != std::string::npos) {
+    query_string = path_only.substr(q_pos + 1);
+    path_only = path_only.substr(0, q_pos);
+  }
+
+  if (!lc.cgi_extension.empty() &&
+      path_only.size() >= lc.cgi_extension.size() &&
+      path_only.compare(path_only.size() - lc.cgi_extension.size(),
+                             lc.cgi_extension.size(), lc.cgi_extension) == 0) {
+    return handle_cgi(path_only, query_string, lc, target_config);
   }
   return handle_static_file(request, lc, target_config);
  } catch (const std::exception& e) {

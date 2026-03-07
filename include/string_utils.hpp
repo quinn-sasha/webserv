@@ -17,8 +17,6 @@ int convert_to_integer(int& result, const std::string& input, int base);
 
 std::string int_to_string(int num);
 
-std::string method_to_str(HttpMethod method);
-
 bool is_digits(const std::string& str);
 
 #endif  // INCLUDE_STRING_UTILS_HPP_

@@ -19,11 +19,17 @@ void parse_location_index_directive(const std::vector<std::string>& tokens,
                                     size_t& token_index, LocationContext& lc);
 void parse_allow_methods_directive(const std::vector<std::string>& tokens,
                                    size_t& token_index, LocationContext& lc);
+void parse_location_client_max_body_size_directive(const std::vector<std::string>& tokens,
+                                   size_t& token_index, LocationContext& lc);
 void parse_autoindex_directive(const std::vector<std::string>& tokens,
                                size_t& token_index, LocationContext& lc);
 void parse_return_directive(const std::vector<std::string>& tokens,
                             size_t& token_index, LocationContext& lc);
-// void parse_cgi_extension_directive(std::vector<std::string>& tokens,
-// size_t&i, LocationContext& lc);
+
+void parse_cgi_extension_directive(const std::vector<std::string>& tokens,
+                            size_t& token_index, LocationContext& lc);
+
+void parse_cgi_path_directive(const std::vector<std::string>& tokens,
+                            size_t& token_index, LocationContext& lc);
 
 #endif

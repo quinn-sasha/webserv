@@ -17,13 +17,16 @@ struct ProcessorResult {
   Response response;  // Needed if normal operation or error
   // Something CGI needs
   std::string script_path; // CGIスクリプトのパスを保持
+  std::string query_string;
+  std::string cgi_path;
 };
 
 class RequestProcessor {
   static ProcessorResult handle_error(ParserStatus status,
                     const ServerContext& target_config);
   static ProcessorResult handle_redirect(const LocationContext& lc);
-  static ProcessorResult handle_cgi(const Request& request);
+  static ProcessorResult handle_cgi(const std::string& path_only, const std::string& query_string,
+                                    const LocationContext& lc, const ServerContext& target_config);
   static std::string find_index_file(const std::string& directory_path, const LocationContext& lc);
   static ProcessorResult create_autoindex_response(const std::string& path,
                                                             const std::string& target);

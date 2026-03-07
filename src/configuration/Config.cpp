@@ -57,7 +57,7 @@ std::vector<std::string> Config::tokenize(const std::string& content) {
 static void finalize_location_context(ServerContext& sc, LocationContext& lc) {
   if (lc.root.empty()) {
     if (sc.server_root.empty()) {
-      lc.root = "./html"; //そもそもここもこれでいいのか？？
+      lc.root = "./html";
     } else {
       lc.root = sc.server_root;
     }
@@ -74,6 +74,10 @@ static void finalize_location_context(ServerContext& sc, LocationContext& lc) {
   if (lc.allow_methods.empty()) {
     lc.allow_methods.push_back("get");
     lc.allow_methods.push_back("post");
+  }
+
+  if (lc.client_max_body_size == -1) {
+    lc.client_max_body_size = sc.client_max_body_size;
   }
 }
 

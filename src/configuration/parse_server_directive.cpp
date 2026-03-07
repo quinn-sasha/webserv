@@ -6,7 +6,7 @@
 /*   By: ikota <ikota@student.42tokyo.jp>           +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/24 14:48:42 by ikota             #+#    #+#             */
-/*   Updated: 2026/03/07 14:09:38 by ikota            ###   ########.fr       */
+/*   Updated: 2026/03/07 18:51:25 by ikota            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -151,9 +151,11 @@ void parse_location_directive(const std::vector<std::string>& tokens,
     parsers["upload_store"] = parse_upload_store_directive;
     parsers["index"] = parse_location_index_directive;
     parsers["allow_methods"] = parse_allow_methods_directive;
+    parsers["client_max_body_size"] = parse_location_client_max_body_size_directive;
     parsers["autoindex"] = parse_autoindex_directive;
     parsers["return"] = parse_return_directive;
-    // TODO: parsers["cgi_extension"] = parse_cgi_extension_directive;
+    parsers["cgi_extension"] = parse_cgi_extension_directive;
+    parsers["cgi_path"] = parse_cgi_path_directive;
   }
 
   while (token_index < tokens.size() && tokens[token_index] != "}") {

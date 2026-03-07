@@ -67,15 +67,6 @@ std::string int_to_string(int num) {
   return ss.str();
 }
 
-std::string method_to_str(HttpMethod method) {
-  switch (method) {
-    case kGet:    return "get";
-    case kPost:   return "post";
-    case kDelete: return "delete";
-    default:      return "unknown";
-  }
-}
-
 bool is_digits(const std::string& str) {
   if (str.empty()) {
     return false;
