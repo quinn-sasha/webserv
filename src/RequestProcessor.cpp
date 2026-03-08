@@ -223,6 +223,54 @@ ProcessorResult RequestProcessor::handle_file(const std::string& path, const Ser
   return result;
 }
 
+ProcessorResult RequestProcessror::handle_upload(const Request& request, const std::string& path_only
+  const LocationContext& lc, const ServerContext& target_config) {
+  
+  ProcessorResult result;
+  std::string save_path;
+
+  if (!lc.upload_store.empty()) {
+    size_t last_slash = path_only.find_last_of('/');
+    std::string filename;
+    if (last_slash == std::string::npos) {
+      filename = path_only;
+    } else {
+      filename = path_only.substr(last_slash + 1);
+    }
+  } else {
+    save_path = lc.root + path_only;
+  }
+
+  struct stat s;
+
+  if (stat(save_path.c_str(), &s) == -1) {
+    return handle_error(errno_to_status(errno), target_config);
+  }
+
+  std::ofstream ofs(save_path.c_str(), std::ios::binary);
+  if (!ofs) {
+    handle_error(kInternalServerError, target_config);
+  }
+  ofs.write(request.body.data(), request.body.size());
+  ofs.close();
+
+  result.response.prepare_success_response(kCreated);
+  result.next_action = ProcessorResult::kSendResponse;
+  return result;
+}
+
+ProcessorResult RequestProcessor::handle_delete(std::string& path, 
+  const ServerContext& target_config) {
+  
+  if (std::remove(path.c_str() != 0)) {
+    return handle_error(errno_to_status(errno), target_config);
+  }
+
+  result.response.prepare_success_response(kNoContent);
+  result.next_action = ProcessorResult::kSendResponse;
+  return result;
+}
+
 ProcessorResult RequestProcessor::handle_static_file(const Request& request,
                   const LocationContext& lc, const ServerContext& target_config) {
   std::string physical_path = lc.root + request.target;
@@ -232,12 +280,21 @@ ProcessorResult RequestProcessor::handle_static_file(const Request& request,
   if (stat(physical_path.c_str(), &s) == -1) {
     return handle_error(errno_to_status(errno), target_config);
   }
-  if (S_ISDIR(s.st_mode)) {
+  // requestのメソッドごとに挙動を変える必要がある。
+  if (request.method == kGet) {
+    if (S_ISDIR(s.st_mode)) {
     return handle_directory(physical_path, request, lc, target_config);
   } else if (S_ISREG(s.st_mode)) {
-    return handle_file(physical_path, target_config);
+      return handle_file(physical_path, target_config);
+    }
   }
-
+  else if (request == kDelete) {
+    if (S_ISDIR(s.st_mode)) {
+      return handle_error(kForbidden, target_config);
+    } else {
+      handle_delete(physical_path, target_config);
+    }
+  }
   return handle_error(kForbidden, target_config);
 }
 
@@ -287,6 +344,10 @@ try {
                              lc.cgi_extension.size(), lc.cgi_extension) == 0) {
     return handle_cgi(path_only, query_string, lc, target_config);
   }
+  if (request.method == kPOST) {
+    handle_upload(request, path_only, lc, target_config);
+  }
+
   return handle_static_file(request, lc, target_config);
  } catch (const std::exception& e) {
 // if not CGI, do some process like fetching file

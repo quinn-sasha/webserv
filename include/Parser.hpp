@@ -9,6 +9,8 @@
 
 enum ParserStatus {
   kOk = 200,
+  kCreated = 201,
+  kNoContent = 204,
   kBadRequest = 400,
   kForbidden = 403,
   kNotFound = 404,

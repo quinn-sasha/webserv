@@ -33,6 +33,8 @@ class RequestProcessor {
   static ProcessorResult handle_directory(const std::string& path, const Request& request,
                                  const LocationContext& lc, const ServerContext& target_config);
   static ProcessorResult handle_file(const std::string& path, const ServerContext& target_config);
+  static ProcessorResult handle_upload(const Request& request, const std::string& path_only, const LocationContext& lc, const ServerContext& target_config);
+  static ProcessorResult handle_delete(std::string& path, const ServerContext& target_config);
   static ProcessorResult handle_static_file(const Request& request,
                                              const LocationContext& lc,
                                              const ServerContext& target_config);
