@@ -11,6 +11,7 @@ class AcceptHandler : public MonitoredFdHandler {
   int listen_fd_;
   std::string addr_;
   std::string port_;
+  std::string client_addr_;
   Server& server_;
 
   AcceptHandler(const AcceptHandler&);

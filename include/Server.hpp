@@ -37,6 +37,7 @@ class Server {
   HandlerStatus handle_fd_event(int pollfd_index);
 
   int register_new_client(int client_fd, const std::string& addr,
+                          const std::string& client_addr,
                           const std::string& port);
 
   void remove_client(int pollfd_index);

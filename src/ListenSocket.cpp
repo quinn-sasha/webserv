@@ -18,7 +18,7 @@ ListenSocket::ListenSocket(const std::string& addr, const std::string& port,
     : fd_(-1) {
   struct addrinfo hints;
   std::memset(&hints, 0, sizeof(struct addrinfo));
-  hints.ai_family = AF_UNSPEC;
+  hints.ai_family = AF_INET;
   hints.ai_socktype = SOCK_STREAM;
   hints.ai_flags = AI_PASSIVE;
   struct addrinfo* result_info;

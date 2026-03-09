@@ -5,27 +5,28 @@
 #include <unistd.h>
 
 #include <cerrno>
+#include <cstdlib>  // std::atoi
 #include <cstring>
 #include <iostream>
-#include <cstdlib>  // std::atoi
 
+#include "CgiHandler.hpp"
+#include "CgiInputHandler.hpp"
+#include "CgiResponseHandler.hpp"
 #include "Config.hpp"
 #include "MonitoredFdHandler.hpp"
 #include "Parser.hpp"
 #include "RequestProcessor.hpp"
-#include "CgiHandler.hpp"
-#include "CgiInputHandler.hpp"
-#include "CgiResponseHandler.hpp" 
 #include "Server.hpp"
 #include "pollfd_utils.hpp"
 
-
 ClientHandler::ClientHandler(int client_fd, const std::string& addr,
-                             const std::string& port, Server& server,
+                             const std::string& port,
+                             const std::string& client_addr, Server& server,
                              Config& config)
     : client_fd_(client_fd),
       addr_(addr),
       port_(port),
+      client_addr_(client_addr),
       server_(server),
       config_(config),
       bytes_sent_(0),
@@ -56,12 +57,13 @@ HandlerStatus ClientHandler::handle_input() {
   }
 
   // kParseFinished or some error status
-  ProcesseorResult result = RequestProcessor::process(status, parser_.get_request());
+  ProcesseorResult result =
+      RequestProcessor::process(status, parser_.get_request());
 
   if (result.next_action == ProcesseorResult::kExecuteCgi) {
     state_ = kExecutingCgi;
 
-     //config の server_name 
+    // config の server_name
     std::string server_name = "localhost";
     int listen_port = std::atoi(port_.c_str());
     const ServerContext& sc = config_.get_config(listen_port, "");
@@ -71,7 +73,7 @@ HandlerStatus ClientHandler::handle_input() {
         break;
       }
     }
-    const std::string remote_addr = ""; //todo accept の引数で設定
+    const std::string remote_addr = "";  // todo accept の引数で設定
 
     CgiHandler cgi(parser_.get_request(), server_name, port_, remote_addr);
     if (cgi.execute_cgi(result.script_path) == -1) {
@@ -85,25 +87,24 @@ HandlerStatus ClientHandler::handle_input() {
     server_.set_fd_events(client_fd_, 0);
 
     // pipe だけ別ハンドラで監視
-    server_.register_fd(cgi.get_pipe_in_fd(),
-                        new CgiInputHandler(cgi.get_pipe_in_fd(),
-                                            cgi.get_cgi_pid(),
-                                            parser_.get_request().body),
-                        POLLOUT);
+    server_.register_fd(
+        cgi.get_pipe_in_fd(),
+        new CgiInputHandler(cgi.get_pipe_in_fd(), cgi.get_cgi_pid(),
+                            parser_.get_request().body),
+        POLLOUT);
 
-    server_.register_fd(cgi.get_pipe_out_fd(),
-                        new CgiResponseHandler(cgi.get_pipe_out_fd(),
-                                           cgi.get_cgi_pid(),
-                                           server_,
-                                           client_fd_),
-                        POLLIN);
+    server_.register_fd(
+        cgi.get_pipe_out_fd(),
+        new CgiResponseHandler(cgi.get_pipe_out_fd(), cgi.get_cgi_pid(),
+                               server_, client_fd_),
+        POLLIN);
 
     return kHandlerContinue;
   }
 
   // Normal response
   state_ = kSendingResponse;
-  response_ = result.response; // Maybe this copy is too heavy 
+  response_ = result.response;  // Maybe this copy is too heavy
   response_str_ = response_.serialize();
   bytes_sent_ = 0;
   return kHandlerReceived;
@@ -118,19 +119,19 @@ HandlerStatus ClientHandler::handle_output() {
   }
 
   ssize_t remaining = response_str_.size() - bytes_sent_;
-  ssize_t num_sent = 
+  ssize_t num_sent =
       send(client_fd_, response_str_.data() + bytes_sent_, remaining, 0);
-  
+
   if (num_sent == -1) {
     return kHandlerClosed;
   }
-  
+
   bytes_sent_ += num_sent;
-  
+
   if (bytes_sent_ < response_str_.size()) {
     return kHandlerContinue;
   }
-  
+
   return kHandlerSent;
 }
 
