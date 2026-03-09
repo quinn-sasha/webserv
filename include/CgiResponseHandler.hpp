@@ -12,6 +12,13 @@ class ClientHandler;
 
 class CgiResponseHandler : public MonitoredFdHandler {
  public:
+   struct ParsedCgiOutput {
+    bool is_local_redirect;
+    std::string local_location;
+    std::string response;
+    ParsedCgiOutput() : is_local_redirect(false), local_location(), response() {}
+  };
+
   CgiResponseHandler(int out_fd, pid_t cgi_pid, ClientHandler* owner);
   CgiResponseHandler(int out_fd, pid_t cgi_pid, Server& server, int client_fd);
   ~CgiResponseHandler();
@@ -34,7 +41,7 @@ class CgiResponseHandler : public MonitoredFdHandler {
 
   static std::string make_504_response_();
   static std::string make_502_response_();
-  static std::string parse_cgi_output_(const std::string& cgi_output);
+  static ParsedCgiOutput parse_cgi_output_(const std::string& cgi_output);
 
   int out_fd_;
   pid_t cgi_pid_;
@@ -51,5 +58,6 @@ class CgiResponseHandler : public MonitoredFdHandler {
   CgiResponseHandler(const CgiResponseHandler&);
   CgiResponseHandler& operator=(const CgiResponseHandler&);
 };
+
 
 #endif  // INCLUDE_CGIRESPONSEHANDLER_HPP_

@@ -56,48 +56,15 @@ HandlerStatus ClientHandler::handle_input() {
   }
 
   // kParseFinished or some error status
-  ProcesseorResult result = RequestProcessor::process(status, parser_.get_request());
+  current_request_ = parser_.get_request();
+  internal_redirect_count_ = 0;
+
+  ProcesseorResult result = RequestProcessor::process(status, current_request_);
 
   if (result.next_action == ProcesseorResult::kExecuteCgi) {
-    state_ = kExecutingCgi;
-
-     //config の server_name 
-    std::string server_name = "localhost";
-    int listen_port = std::atoi(port_.c_str());
-    const ServerContext& sc = config_.get_config(listen_port, "");
-    for (std::size_t i = 0; i < sc.server_names.size(); ++i) {
-      if (!sc.server_names[i].empty()) {
-        server_name = sc.server_names[i];
-        break;
-      }
-    }
-    const std::string remote_addr = ""; //todo accept の引数で設定
-
-    CgiHandler cgi(parser_.get_request(), server_name, port_, remote_addr);
-    if (cgi.execute_cgi(result.script_path) == -1) {
-      response_.prepare_error_response(kInternalServerError);
-      response_str_ = response_.serialize();
-      state_ = kSendingResponse;
+    if (!handle_cgi(current_request_, result.script_path)) {
       return kHandlerReceived;
     }
-
-    // client_fd は保持したまま、一旦 poll 監視を止める（読みも書きもしない）
-    server_.set_fd_events(client_fd_, 0);
-
-    // pipe だけ別ハンドラで監視
-    server_.register_fd(cgi.get_pipe_in_fd(),
-                        new CgiInputHandler(cgi.get_pipe_in_fd(),
-                                            cgi.get_cgi_pid(),
-                                            parser_.get_request().body),
-                        POLLOUT);
-
-    server_.register_fd(cgi.get_pipe_out_fd(),
-                        new CgiResponseHandler(cgi.get_pipe_out_fd(),
-                                           cgi.get_cgi_pid(),
-                                           server_,
-                                           client_fd_),
-                        POLLIN);
-
     return kHandlerContinue;
   }
 
@@ -134,10 +101,95 @@ HandlerStatus ClientHandler::handle_output() {
   return kHandlerSent;
 }
 
+bool ClientHandler::handle_cgi(const Request& request,
+                                           const std::string& script_path) {
+  state_ = kExecutingCgi;
+
+  std::string server_name;
+  std::string remote_addr;
+  setup_cgi_(server_name, remote_addr);
+
+  CgiHandler cgi(request, server_name, port_, remote_addr);
+  if (cgi.execute_cgi(script_path) == -1) {
+    response_.prepare_error_response(kInternalServerError);
+    response_str_ = response_.serialize();
+    state_ = kSendingResponse;
+    server_.set_fd_events(client_fd_, POLLOUT);
+    return false;
+  }
+
+  server_.set_fd_events(client_fd_, 0);
+
+  server_.register_fd(cgi.get_pipe_in_fd(),
+                      new CgiInputHandler(cgi.get_pipe_in_fd(),
+                                          cgi.get_cgi_pid(),
+                                          request.body),
+                      POLLOUT);
+
+  server_.register_fd(cgi.get_pipe_out_fd(),
+                      new CgiResponseHandler(cgi.get_pipe_out_fd(),
+                                             cgi.get_cgi_pid(),
+                                             server_,
+                                             client_fd_),
+                      POLLIN);
+  return true;
+}
+
+void ClientHandler::setup_cgi_(std::string& server_name,
+                               std::string& remote_addr) const {
+  server_name = "localhost";
+
+  int listen_port = std::atoi(port_.c_str());
+  const ServerContext& sc = config_.get_config(listen_port, "");
+  for (std::size_t i = 0; i < sc.server_names.size(); ++i) {
+    if (!sc.server_names[i].empty()) {
+      server_name = sc.server_names[i];
+      break;
+    }
+  }
+
+  remote_addr = "";  // TODO: accept 側で取得したクライアントIPを設定
+}
+
 void ClientHandler::cgi_response_ready(const std::string& response) {
   response_str_ = response;
   bytes_sent_ = 0;
   state_ = kSendingResponse;
 
+  server_.set_fd_events(client_fd_, POLLOUT);
+}
+
+void ClientHandler::cgi_local_redirect_ready(const std::string& location) {
+  if (location.empty() || location[0] != '/') {
+    cgi_response_ready("HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n");
+    return;
+  }
+
+  ++internal_redirect_count_;
+  if (internal_redirect_count_ > kMaxInternalRedirects) {
+    response_.prepare_error_response(kInternalServerError);
+    response_str_ = response_.serialize();
+    bytes_sent_ = 0;
+    state_ = kSendingResponse;
+    server_.set_fd_events(client_fd_, POLLOUT);
+    return;
+  }
+
+  Request redirected = current_request_;
+  redirected.target = location;
+  current_request_ = redirected;
+
+  ProcesseorResult result = RequestProcessor::process(kParseFinished, current_request_);
+  if (result.next_action == ProcesseorResult::kExecuteCgi) {
+    if (!handle_cgi(current_request_, result.script_path)) {
+      return;
+    }
+    return;
+  }
+
+  response_ = result.response;
+  response_str_ = response_.serialize();
+  bytes_sent_ = 0;
+  state_ = kSendingResponse;
   server_.set_fd_events(client_fd_, POLLOUT);
 }

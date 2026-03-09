@@ -82,12 +82,16 @@ static std::string key_to_lower_local(const std::string& str) {
   return lower;
 }
 
-std::string CgiResponseHandler::parse_cgi_output_(const std::string& cgi_output) {
+CgiResponseHandler::ParsedCgiOutput
+CgiResponseHandler::parse_cgi_output_(const std::string& cgi_output) {
+  ParsedCgiOutput result;
+
   std::size_t body_start = cgi_output.find("\r\n\r\n");
   if (body_start == std::string::npos) {
     body_start = cgi_output.find("\n\n");
     if (body_start == std::string::npos) {
-      return make_502_response_();
+      result.response = make_502_response_();
+      return result;
     }
     body_start += 2;
   } else {
@@ -103,9 +107,7 @@ std::string CgiResponseHandler::parse_cgi_output_(const std::string& cgi_output)
   std::string status_line;
 
   while (std::getline(headers_stream, line)) {
-    if (!line.empty() && line[line.size() - 1] == '\r') {
-      line.erase(line.size() - 1);
-    }
+    if (!line.empty() && line[line.size() - 1] == '\r') line.erase(line.size() - 1);
     if (line.empty()) continue;
 
     std::size_t colon_pos = line.find(':');
@@ -113,10 +115,8 @@ std::string CgiResponseHandler::parse_cgi_output_(const std::string& cgi_output)
 
     std::string key = line.substr(0, colon_pos);
     std::string value = line.substr(colon_pos + 1);
-
     std::size_t value_start = value.find_first_not_of(" \t");
-    if (value_start != std::string::npos) value = value.substr(value_start);
-    else value = "";
+    value = (value_start != std::string::npos) ? value.substr(value_start) : "";
 
     std::string lower_key = key_to_lower_local(key);
     if (lower_key == "status") status_line = value;
@@ -127,8 +127,19 @@ std::string CgiResponseHandler::parse_cgi_output_(const std::string& cgi_output)
   const bool has_location = headers_map.count("location") != 0;
 
   if (!has_content_type && !has_location) {
-    std::cerr << "CGI Error: Missing both Content-Type and Location headers.\n";
-    return make_502_response_();
+    result.response = make_502_response_();
+    return result;
+  }
+
+  // CGI local redirect:
+  // Location が "/" 始まり かつ Status 未指定
+  if (has_location && status_line.empty()) {
+    const std::string& loc = headers_map["location"];
+    if (!loc.empty() && loc[0] == '/') {
+      result.is_local_redirect = true;
+      result.local_location = loc;
+      return result;
+    }
   }
 
   if (status_line.empty()) {
@@ -156,7 +167,8 @@ std::string CgiResponseHandler::parse_cgi_output_(const std::string& cgi_output)
   }
 
   resp << "\r\n" << body;
-  return resp.str();
+  result.response = resp.str();
+  return result;
 }
 
 HandlerStatus CgiResponseHandler::handle_timeout() {
@@ -209,14 +221,17 @@ HandlerStatus CgiResponseHandler::handle_input() {
       cgi_pid_ = -1;
     }
 
-    const std::string parsed = parse_cgi_output_(cgi_output_);
-    const bool parsed_is_502 = (parsed.find("HTTP/1.1 502") == 0);
-    const std::string resp = (!parsed_is_502) ? parsed
-                          : (cgi_error ? make_502_response_() : parsed);
-
+    const ParsedCgiOutput parsed = parse_cgi_output_(cgi_output_);
     ClientHandler* ch = server_.find_client_handler(client_fd_);
     if (ch != NULL) {
-      ch->cgi_response_ready(resp);
+      if (parsed.is_local_redirect) {
+        ch->cgi_local_redirect_ready(parsed.local_location);
+      } else {
+        const bool parsed_is_502 = (parsed.response.find("HTTP/1.1 502") == 0);
+        const std::string resp = (!parsed_is_502) ? parsed.response
+                              : (cgi_error ? make_502_response_() : parsed.response);
+        ch->cgi_response_ready(resp);
+      }
     }
 
     return kCgiInputDone;
