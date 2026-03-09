@@ -146,7 +146,7 @@ std::string Response::get_mime_type(const std::string& path) {
   }
 
   std::string extension = path.substr(pos + 1);
-  if (extension == "html" || extension == "htm") return "text/html";
+  if (extension == "html" || extension == "htm" || extension == "py") return "text/html";
   if (extension == "css")  return "text/css";
   if (extension == "js")   return "text/javascript";
   if (extension == "jpg" || extension == "jpeg") return "image/jpeg";
