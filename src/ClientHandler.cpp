@@ -50,15 +50,15 @@ HandlerStatus ClientHandler::handle_input() {
 
   // kParseFinished or some error status
   const ServerContext& target_config = config_.get_config(my_port, host_name);
-  ProcesseorResult result = RequestProcessor::process(status, parser_.get_request());
+  ProcessorResult result = RequestProcessor::process(status, parser_.get_request());
 
-  if (result.next_action == ProcesseorResult::kExecuteCgi) {
+  if (result.next_action == ProcessorResult::kExecuteCgi) {
     state_ = kExecutingCgi;
 
     CgiHandler cgi(parser_.get_request());
     if (cgi.execute_cgi(result.script_path) == -1) {
       // Failed to execute CGI, send 500
-      response_.prepare_error_response(kInternalServerError);
+      response_.prepare_error_response(kInternalServerError, );
       response_str_ = response_.serialize();
       state_ = kSendingResponse;
       return kHandlerReceived;

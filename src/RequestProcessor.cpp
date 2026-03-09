@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <unistd.h>
+#include <fstream>
 
 namespace http_constants {
   const char* kHtmlStart    = "<html><head><title>Index of ";
@@ -22,19 +23,17 @@ ProcessorResult RequestProcessor::handle_error(ParserStatus status,
   if (target_config.error_pages.count(status)) {
     std::string error_uri = target_config.error_pages.at(status);
     std::string root = "";
-    try {
-      const LocationContext& error_lc = target_config.get_matching_location(error_uri);
-      if (error_lc.root.empty()) {
-        root = target_config.server_root;
-      } else {
-        root = error_lc.root;
-      }
+    const LocationContext& error_lc = target_config.get_matching_location(error_uri);
+    if (error_lc.root.empty()) {
+      root = target_config.server_root;
+    } else {
+      root = error_lc.root;
+    }
 
-      if (error_uri[0] != '/') {
-        error_uri.insert(0, "/");
-      }
-      error_page_full_path = root + error_uri;
-    } catch (...) {}
+    if (error_uri[0] != '/') {
+      error_uri.insert(0, "/");
+    }
+    error_page_full_path = root + error_uri;
   }
   result.response.prepare_error_response(status, error_page_full_path);
   result.next_action = ProcessorResult::kSendResponse;
@@ -69,8 +68,23 @@ bool RequestProcessor::is_method_allowed(HttpMethod method, const LocationContex
   return false;
 }
 
+static bool is_cgi_handler(const Request& request, const LocationContext& lc, std::string& path_only) {
+
+  bool is_in_cgi_bin = (request.target.find("/cgi-bin") != std::string::npos);
+
+  if (is_in_cgi_bin && !lc.cgi_extension.empty() &&
+      path_only.size() >= lc.cgi_extension.size() &&
+      path_only.compare(path_only.size() - lc.cgi_extension.size(),
+                             lc.cgi_extension.size(), lc.cgi_extension) == 0) {
+    return true;
+  }
+
+  return false;
+}
+
 ProcessorResult RequestProcessor::handle_cgi(const std::string& path_only,
                                              const std::string& query_string,
+                                             const Request& request,
                                              const LocationContext& lc,
                                              const ServerContext& target_config) {
   ProcessorResult result;
@@ -106,6 +120,12 @@ ProcessorResult RequestProcessor::handle_cgi(const std::string& path_only,
     } else {
         return handle_error(kInternalServerError, target_config);
     }
+  }
+
+  if (request.method == kPost) {
+    result.request_body = request.body;
+  } else {
+    result.request_body = "";
   }
   return result;
 }
@@ -223,9 +243,9 @@ ProcessorResult RequestProcessor::handle_file(const std::string& path, const Ser
   return result;
 }
 
-ProcessorResult RequestProcessror::handle_upload(const Request& request, const std::string& path_only
+ProcessorResult RequestProcessor::handle_upload(const Request& request, const std::string& path_only,
   const LocationContext& lc, const ServerContext& target_config) {
-  
+
   ProcessorResult result;
   std::string save_path;
 
@@ -237,21 +257,23 @@ ProcessorResult RequestProcessror::handle_upload(const Request& request, const s
     } else {
       filename = path_only.substr(last_slash + 1);
     }
+    save_path = lc.upload_store;
+    if (!save_path.empty() && save_path[save_path.length() - 1] != '/') {
+      save_path.append("/");
+    }
+    save_path.append(filename);
   } else {
     save_path = lc.root + path_only;
   }
 
-  struct stat s;
+  std::ofstream ofs(save_path.c_str(), std::ios::binary);
 
-  if (stat(save_path.c_str(), &s) == -1) {
+  if (!ofs) {
     return handle_error(errno_to_status(errno), target_config);
   }
-
-  std::ofstream ofs(save_path.c_str(), std::ios::binary);
-  if (!ofs) {
-    handle_error(kInternalServerError, target_config);
+  if (!request.body.empty()) {
+    ofs.write(request.body.data(), request.body.size());
   }
-  ofs.write(request.body.data(), request.body.size());
   ofs.close();
 
   result.response.prepare_success_response(kCreated);
@@ -259,10 +281,12 @@ ProcessorResult RequestProcessror::handle_upload(const Request& request, const s
   return result;
 }
 
-ProcessorResult RequestProcessor::handle_delete(std::string& path, 
+ProcessorResult RequestProcessor::handle_delete(std::string& path,
   const ServerContext& target_config) {
-  
-  if (std::remove(path.c_str() != 0)) {
+
+  ProcessorResult result;
+
+  if (std::remove(path.c_str()) != 0) {
     return handle_error(errno_to_status(errno), target_config);
   }
 
@@ -271,16 +295,15 @@ ProcessorResult RequestProcessor::handle_delete(std::string& path,
   return result;
 }
 
-ProcessorResult RequestProcessor::handle_static_file(const Request& request,
+ProcessorResult RequestProcessor::handle_static_file(const Request& request, const std::string& path,
                   const LocationContext& lc, const ServerContext& target_config) {
-  std::string physical_path = lc.root + request.target;
-  std::cout << "DEBUG: Trying to open file: [" << physical_path << "]" << std::endl;
+  std::string physical_path = lc.root + path;
   struct stat s;
 
   if (stat(physical_path.c_str(), &s) == -1) {
     return handle_error(errno_to_status(errno), target_config);
   }
-  // requestのメソッドごとに挙動を変える必要がある。
+
   if (request.method == kGet) {
     if (S_ISDIR(s.st_mode)) {
     return handle_directory(physical_path, request, lc, target_config);
@@ -288,17 +311,16 @@ ProcessorResult RequestProcessor::handle_static_file(const Request& request,
       return handle_file(physical_path, target_config);
     }
   }
-  else if (request == kDelete) {
+  else if (request.method == kDelete) {
     if (S_ISDIR(s.st_mode)) {
       return handle_error(kForbidden, target_config);
     } else {
-      handle_delete(physical_path, target_config);
+      return handle_delete(physical_path, target_config);
     }
   }
   return handle_error(kForbidden, target_config);
 }
 
-// エラーかどうかだけを判定して、status code を書き込み返す（一時的な実装）
 ProcessorResult RequestProcessor::process(
     ParserStatus status, const Request& request, const ServerContext& target_config) {
   ProcessorResult result;
@@ -306,11 +328,12 @@ ProcessorResult RequestProcessor::process(
     return handle_error(status, target_config);
   }
   // construct URI
-try {
-  //最長一致するLocationContextを取得
   const LocationContext& lc = target_config.get_matching_location(request.target);
 
-  // リダイレクト処理
+  if (lc.path == "__NOT_FOUND__") {
+    return handle_error(kNotFound, target_config);
+  }
+
   if (lc.redirect_status_code != -1) {
     return handle_redirect(lc);
   }
@@ -326,7 +349,7 @@ try {
     client_max_body_size = target_config.client_max_body_size;
   }
 
-  if (request.body.size() > client_max_body_size) {
+  if (static_cast<long>(request.body.size()) > client_max_body_size) {
    return handle_error(kContentTooLarge, target_config);
   }
 
@@ -338,19 +361,13 @@ try {
     path_only = path_only.substr(0, q_pos);
   }
 
-  if (!lc.cgi_extension.empty() &&
-      path_only.size() >= lc.cgi_extension.size() &&
-      path_only.compare(path_only.size() - lc.cgi_extension.size(),
-                             lc.cgi_extension.size(), lc.cgi_extension) == 0) {
-    return handle_cgi(path_only, query_string, lc, target_config);
-  }
-  if (request.method == kPOST) {
-    handle_upload(request, path_only, lc, target_config);
+  if (is_cgi_handler(request, lc, path_only)) {
+    return handle_cgi(path_only, query_string, request, lc, target_config);
   }
 
-  return handle_static_file(request, lc, target_config);
- } catch (const std::exception& e) {
-// if not CGI, do some process like fetching file
-  return handle_error(kNotFound, target_config);
- }
+  if (request.method == kPost) {
+    return handle_upload(request, path_only, lc, target_config);
+  }
+
+  return handle_static_file(request, path_only, lc, target_config);
 }

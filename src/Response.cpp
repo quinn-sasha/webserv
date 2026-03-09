@@ -64,6 +64,11 @@ void Response::prepare_success_response(ParserStatus status) {
   int code = static_cast<int>(status);
   status_code_ = int_to_string(code);
   reason_phrase_ = get_reason_phrase(status);
+
+  if (code == 204) {
+    body_ = "";
+    add_header("Content-Length", "0");
+  }
 }
 
 void Response::prepare_redirect_response(int status, const std::string& redirect_url) {

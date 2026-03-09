@@ -3,6 +3,8 @@
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+#include <iostream>
+#include <cstdlib>
 
 #include "config_utils.hpp"
 #include "parse_server_directive.hpp"
@@ -163,10 +165,17 @@ void Config::load_file(const std::string& filepath) {
   std::string content = read_file(filepath);
   std::vector<std::string> tokens = tokenize(content);
 
+  bool server_found = false;
   for (size_t i = 0; i < tokens.size(); ++i) {
     if (tokens[i] == "server") {
+      server_found = true;
       i++;
       parse_server(tokens, i);
     }
+  }
+
+  if (!server_found) {
+    std::cout << "No server directory found in file." << std::endl;
+    std::exit(EXIT_FAILURE);
   }
 }

@@ -6,7 +6,7 @@
 /*   By: ikota <ikota@student.42tokyo.jp>           +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/24 14:48:42 by ikota             #+#    #+#             */
-/*   Updated: 2026/03/07 18:51:25 by ikota            ###   ########.fr       */
+/*   Updated: 2026/03/09 18:10:11 by ikota            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -200,8 +200,10 @@ const LocationContext& ServerContext::get_matching_location(
       }
     }
   }
-  if (!best_match) {
-    throw std::runtime_error("get_matching_location(): location not found");
+  if (best_match == NULL) {
+    static LocationContext empty_lc;
+    empty_lc.path = "__NOT_FOUND__";
+    return empty_lc;
   }
   return *best_match;
 }
