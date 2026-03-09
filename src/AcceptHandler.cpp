@@ -35,19 +35,29 @@ AcceptHandler::AcceptHandler(int listen_fd, Server& server,
 // この処理が呼び出される
 HandlerStatus AcceptHandler::handle_input() {
   struct sockaddr_in client_addr;
+<<<<<<< HEAD
   socklen_t addr_len = sizeof(client_addr);
+=======
+  socklen_t addr_len;
+>>>>>>> 7d995dbd3dbae6e2cbe48119d0e7e56b557cd23b
   int client_fd = accept(listen_fd_, (struct sockaddr*)&client_addr, &addr_len);
   if (client_fd == -1) {
     return kHandlerContinue;
   }
   if (fcntl(client_fd, F_SETFL, O_NONBLOCK) == -1) {
     return kHandlerFatalError;
+<<<<<<< HEAD
   }  
   std::string client_ip_addr = translate_newtwork_addr(client_addr);
   if (server_.register_new_client(client_fd, addr_, client_ip_addr, port_) ==
+=======
+  }
+  if (server_.register_new_client(client_fd, addr_, client_addr_, port_) ==
+>>>>>>> 7d995dbd3dbae6e2cbe48119d0e7e56b557cd23b
       -1) {
     close(client_fd);
     return kHandlerContinue;
   }
+  client_addr_ = translate_newtwork_addr(client_addr, addr_len);
   return kHandlerAccepted;
 }
