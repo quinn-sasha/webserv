@@ -5,27 +5,28 @@
 #include <unistd.h>
 
 #include <cerrno>
+#include <cstdlib>  // std::atoi
 #include <cstring>
 #include <iostream>
-#include <cstdlib>  // std::atoi
 
+#include "CgiHandler.hpp"
+#include "CgiInputHandler.hpp"
+#include "CgiResponseHandler.hpp"
 #include "Config.hpp"
 #include "MonitoredFdHandler.hpp"
 #include "Parser.hpp"
 #include "RequestProcessor.hpp"
-#include "CgiHandler.hpp"
-#include "CgiInputHandler.hpp"
-#include "CgiResponseHandler.hpp" 
 #include "Server.hpp"
 #include "pollfd_utils.hpp"
 
-
 ClientHandler::ClientHandler(int client_fd, const std::string& addr,
-                             const std::string& port, Server& server,
+                             const std::string& port,
+                             const std::string& client_addr, Server& server,
                              Config& config)
     : client_fd_(client_fd),
       addr_(addr),
       port_(port),
+      client_addr_(client_addr),
       server_(server),
       config_(config),
       bytes_sent_(0),
@@ -70,7 +71,7 @@ HandlerStatus ClientHandler::handle_input() {
 
   // Normal response
   state_ = kSendingResponse;
-  response_ = result.response; // Maybe this copy is too heavy 
+  response_ = result.response;  // Maybe this copy is too heavy
   response_str_ = response_.serialize();
   bytes_sent_ = 0;
   return kHandlerReceived;
@@ -85,19 +86,19 @@ HandlerStatus ClientHandler::handle_output() {
   }
 
   ssize_t remaining = response_str_.size() - bytes_sent_;
-  ssize_t num_sent = 
+  ssize_t num_sent =
       send(client_fd_, response_str_.data() + bytes_sent_, remaining, 0);
-  
+
   if (num_sent == -1) {
     return kHandlerClosed;
   }
-  
+
   bytes_sent_ += num_sent;
-  
+
   if (bytes_sent_ < response_str_.size()) {
     return kHandlerContinue;
   }
-  
+
   return kHandlerSent;
 }
 
@@ -147,8 +148,7 @@ void ClientHandler::setup_cgi_(std::string& server_name,
       break;
     }
   }
-
-  remote_addr = "";  // TODO: accept 側で取得したクライアントIPを設定
+  remote_addr = client_addr_;
 }
 
 void ClientHandler::cgi_response_ready(const std::string& response) {

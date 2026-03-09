@@ -3,19 +3,19 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
+#include <stdint.h>
 #include <sys/poll.h>
 #include <unistd.h>
 
+#include <climits>
 #include <cstddef>
 #include <cstring>
+#include <ctime>
 #include <iostream>
 #include <map>
 #include <stdexcept>
 #include <string>
 #include <utility>
-#include <ctime>
-#include <climits>
-#include <stdint.h>
 
 #include "AcceptHandler.hpp"
 #include "CgiInputHandler.hpp"
@@ -164,6 +164,7 @@ void Server::remove_client(int pollfd_index) {
 
 // Returns 0 if success, otherwise -1
 int Server::register_new_client(int client_fd, const std::string& addr,
+                                const std::string& client_addr,
                                 const std::string& port) {
   if (num_clients_ >= kMaxClients) {
     std::cerr << "Number of clients exceeded the limit " << kMaxClients << "\n";
@@ -174,7 +175,7 @@ int Server::register_new_client(int client_fd, const std::string& addr,
   set_pollfd_in(tmp, client_fd);
   poll_fds_.push_back(tmp);
   MonitoredFdHandler* handler =
-      new ClientHandler(client_fd, addr, port, *this, config_);
+      new ClientHandler(client_fd, addr, port, client_addr, *this, config_);
   monitored_fd_to_handler_.insert(std::make_pair(client_fd, handler));
   return 0;
 }
