@@ -59,15 +59,18 @@ void Response::prepare_error_response(ParserStatus status, const std::string& pa
   add_header("Content-Type", "text/html");
 }
 
-// TODO: add arguments
 void Response::prepare_success_response(ParserStatus status) {
   int code = static_cast<int>(status);
   status_code_ = int_to_string(code);
   reason_phrase_ = get_reason_phrase(status);
 
-  if (code == 204) {
-    body_ = "";
+  if (code == kNoContent) {
+    body_.clear();
     add_header("Content-Length", "0");
+  } else {
+    std::stringstream ss;
+    ss << body_.size();
+    add_header("Content-Length", ss.str());
   }
 }
 
@@ -146,12 +149,11 @@ std::string Response::get_mime_type(const std::string& path) {
   }
 
   std::string extension = path.substr(pos + 1);
-  if (extension == "html" || extension == "htm" || extension == "py") return "text/html";
+  if (extension == "html" || extension == "htm") return "text/html";
   if (extension == "css")  return "text/css";
-  if (extension == "js")   return "text/javascript";
   if (extension == "jpg" || extension == "jpeg") return "image/jpeg";
   if (extension == "png")  return "image/png";
-  if (extension == "txt")  return "text/plain";
+  if (extension == "txt" || extension == "py")  return "text/plain";
 
   return "application/octet-stream";
 }
