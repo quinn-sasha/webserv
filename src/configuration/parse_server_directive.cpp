@@ -24,10 +24,9 @@ void parse_listen_directive(const std::vector<std::string>& tokens,
 
     if (lc.address == "localhost") {
       lc.address = "127.0.0.1";
-      std::string port_str = val.substr(colon_pos + 1);
-      lc.port = static_cast<int>(safe_strtol(port_str, ConfigLimits::kPortMin,
-                                             ConfigLimits::kPortMax));
     }
+    lc.port = static_cast<int>(safe_strtol(port_str, ConfigLimits::kPortMin,
+                                             ConfigLimits::kPortMax));
   } else {
       // PORT only
       lc.address = "0.0.0.0";
@@ -36,10 +35,9 @@ void parse_listen_directive(const std::vector<std::string>& tokens,
   }
 
   sc.listens.push_back(lc);
-  token_index++;
 
   if (token_index >= tokens.size() || tokens[token_index] != ";") {
-    error_exit("Expected ';'");
+    error_exit("");
   }
   token_index++;
 }
@@ -111,7 +109,7 @@ typedef void (*LocationParser)(const std::vector<std::string>&, size_t&,
                                LocationContext&);
 
 void parse_location_directive(const std::vector<std::string>& tokens,
-                              size_t& token_index, ServerContext& /* sc */) {
+                              size_t& token_index, ServerContext& sc) {
   LocationContext lc;
   lc.is_exact_match = false;
 

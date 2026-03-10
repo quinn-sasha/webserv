@@ -56,17 +56,6 @@ HandlerStatus ClientHandler::handle_input() {
     return kHandlerContinue;
   }
 
-  // kParseFinished or some error status
-  current_request_ = parser_.get_request();
-  internal_redirect_count_ = 0;
-
-  ProcesseorResult result = RequestProcessor::process(status, current_request_);
-
-  if (result.next_action == ProcesseorResult::kExecuteCgi) {
-    if (!handle_cgi(current_request_, result.script_path)) {
-      return kHandlerReceived;
-    }
-    return kHandlerContinue;
   const Request& req = parser_.get_request();
   std::string host_name = "";
 
@@ -75,10 +64,16 @@ HandlerStatus ClientHandler::handle_input() {
   if (it != req.headers.end()) {
     host_name = it->second;
   }
-  const ServerContext& target_config = config_.get_config(std::stoi(port_), host_name);
-  ProcessorResult result = RequestProcessor::process(status, parser_.get_request(), target_config);
-      //response_.prepare_error_response(kInternalServerError, RequestProcessor::get_error_page_path(target_config, kInternalServerError));
+  const ServerContext& target_config = config_.get_config(std::atoi(port_.c_str()), host_name);
+  ProcessorResult result = RequestProcessor::process(status, req, target_config);
 
+  internal_redirect_count_ = 0;
+
+  if (result.next_action == ProcessorResult::kExecuteCgi) {
+    if (!handle_cgi(current_request_, result.script_path)) {
+      return kHandlerReceived;
+    }
+    return kHandlerContinue;
   }
 
   // Normal response
@@ -124,7 +119,14 @@ bool ClientHandler::handle_cgi(const Request& request,
 
   CgiHandler cgi(request, server_name, port_, remote_addr);
   if (cgi.execute_cgi(script_path) == -1) {
-    response_.prepare_error_response(kInternalServerError);
+    const Request& req = parser_.get_request();
+    std::string host_name = "";
+    std::map<std::string, std::string>::const_iterator it = req.headers.find("Host");
+    if (it != req.headers.end()) {
+    host_name = it->second;
+    }
+    const ServerContext& target_config = config_.get_config(std::atoi(port_.c_str()), host_name);
+    response_.prepare_error_response(kInternalServerError, RequestProcessor::get_error_page_path(target_config, kInternalServerError));
     response_str_ = response_.serialize();
     state_ = kSendingResponse;
     server_.set_fd_events(client_fd_, POLLOUT);
@@ -178,8 +180,16 @@ void ClientHandler::cgi_local_redirect_ready(const std::string& location) {
   }
 
   ++internal_redirect_count_;
+      const Request& req = parser_.get_request();
+      std::string host_name = "";
+      std::map<std::string, std::string>::const_iterator it = req.headers.find("Host");
+      if (it != req.headers.end()) {
+      host_name = it->second;
+      }
+      const ServerContext& target_config = config_.get_config(std::atoi(port_.c_str()), host_name);
   if (internal_redirect_count_ > kMaxInternalRedirects) {
-    response_.prepare_error_response(kInternalServerError);
+
+    response_.prepare_error_response(kInternalServerError, RequestProcessor::get_error_page_path(target_config, kInternalServerError));
     response_str_ = response_.serialize();
     bytes_sent_ = 0;
     state_ = kSendingResponse;
@@ -191,8 +201,8 @@ void ClientHandler::cgi_local_redirect_ready(const std::string& location) {
   redirected.target = location;
   current_request_ = redirected;
 
-  ProcesseorResult result = RequestProcessor::process(kParseFinished, current_request_);
-  if (result.next_action == ProcesseorResult::kExecuteCgi) {
+  ProcessorResult result = RequestProcessor::process(kParseFinished, current_request_, target_config);
+  if (result.next_action == ProcessorResult::kExecuteCgi) {
     if (!handle_cgi(current_request_, result.script_path)) {
       return;
     }
