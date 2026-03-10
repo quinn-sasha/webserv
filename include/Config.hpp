@@ -13,6 +13,7 @@ struct ConfigLimits {
   static const long kRedirectCodeMax = 399;
   static const long kMovedPermanently = 301;
   static const long kFound = 302;
+  static const long kSeeOther = 303;
   static const long kTemporaryRedirect = 307;
   static const long kPermanentRedirect = 308;
 };
@@ -21,6 +22,7 @@ struct LocationContext {
   std::string path;
   std::string root;
   std::vector<std::string> allow_methods;
+  long client_max_body_size;
   std::vector<std::string> index;
   bool is_exact_match;
   bool autoindex;
@@ -32,7 +34,8 @@ struct LocationContext {
 
   LocationContext()
       : path("/"),
-        root("./html"),
+        root(""),
+        client_max_body_size(-1),
         is_exact_match(false),
         autoindex(false),
         redirect_status_code(-1) {}
@@ -52,7 +55,7 @@ struct ServerContext {
   std::map<int, std::string> error_pages;
   std::vector<LocationContext> locations;
 
-  ServerContext() : client_max_body_size(ConfigLimits::kClientMaxBodyDefault) {}
+  ServerContext() : server_root("./html"), client_max_body_size(ConfigLimits::kClientMaxBodyDefault) {}
   const LocationContext& get_matching_location(const std::string& uri) const;
 };
 

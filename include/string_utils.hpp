@@ -4,6 +4,8 @@
 #include <list>
 #include <string>
 
+#include "Parser.hpp"
+
 std::string to_lower(std::string s);
 
 std::list<std::string> split_string(const std::string& target,
@@ -14,5 +16,7 @@ std::string trim(const std::string& target, std::string to_delete);
 int convert_to_integer(int& result, const std::string& input, int base);
 
 std::string int_to_string(int num);
+
+bool is_digits(const std::string& str);
 
 #endif  // INCLUDE_STRING_UTILS_HPP_

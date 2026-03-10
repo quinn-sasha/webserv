@@ -67,6 +67,18 @@ HandlerStatus ClientHandler::handle_input() {
       return kHandlerReceived;
     }
     return kHandlerContinue;
+  const Request& req = parser_.get_request();
+  std::string host_name = "";
+
+  // map::find を使って、const 安全に値を探す
+  std::map<std::string, std::string>::const_iterator it = req.headers.find("Host");
+  if (it != req.headers.end()) {
+    host_name = it->second;
+  }
+  const ServerContext& target_config = config_.get_config(std::stoi(port_), host_name);
+  ProcessorResult result = RequestProcessor::process(status, parser_.get_request(), target_config);
+      //response_.prepare_error_response(kInternalServerError, RequestProcessor::get_error_page_path(target_config, kInternalServerError));
+
   }
 
   // Normal response

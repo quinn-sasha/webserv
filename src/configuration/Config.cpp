@@ -3,6 +3,8 @@
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+#include <iostream>
+#include <cstdlib>
 
 #include "config_utils.hpp"
 #include "parse_server_directive.hpp"
@@ -56,7 +58,11 @@ std::vector<std::string> Config::tokenize(const std::string& content) {
 
 static void finalize_location_context(ServerContext& sc, LocationContext& lc) {
   if (lc.root.empty()) {
-    lc.root = sc.server_root;
+    if (sc.server_root == "./html") {
+      lc.root = "./html";
+    } else {
+      lc.root = sc.server_root;
+    }
   }
 
   if (lc.index.empty()) {
@@ -70,6 +76,10 @@ static void finalize_location_context(ServerContext& sc, LocationContext& lc) {
   if (lc.allow_methods.empty()) {
     lc.allow_methods.push_back("get");
     lc.allow_methods.push_back("post");
+  }
+
+  if (lc.client_max_body_size == -1) {
+    lc.client_max_body_size = sc.client_max_body_size;
   }
 }
 
@@ -98,10 +108,11 @@ static void finalize_server_context(ServerContext& sc) {
 
 void Config::parse_server(const std::vector<std::string>& tokens,
                           size_t& token_index) {
-  if (token_index >= tokens.size() || tokens[token_index++] != "{") {
+  if (token_index >= tokens.size() || tokens[token_index] != "{") {
     error_exit("Expected '{' after server");
   }
-  static std::map<std::string, void (*)(const std::vector<std::string>&, size_t&, ServerContext&)> s_parsers;
+  token_index++;
+  static std::map<std::string, ServerParser> s_parsers;
   if (s_parsers.empty()) {
     s_parsers["listen"] = parse_listen_directive;
     s_parsers["server_name"] = parse_server_name_directive;
@@ -154,10 +165,17 @@ void Config::load_file(const std::string& filepath) {
   std::string content = read_file(filepath);
   std::vector<std::string> tokens = tokenize(content);
 
+  bool server_found = false;
   for (size_t i = 0; i < tokens.size(); ++i) {
     if (tokens[i] == "server") {
+      server_found = true;
       i++;
       parse_server(tokens, i);
     }
+  }
+
+  if (!server_found) {
+    std::cout << "No server directory found in file." << std::endl;
+    std::exit(EXIT_FAILURE);
   }
 }

@@ -3,8 +3,8 @@
 #include <iostream>
 #include <sstream>
 #include <cstdlib>
+#include <algorithm>
 #include <cerrno>
-#include <algorithm> 
 
 void error_exit(const std::string& msg) {
   std::cerr << "Error: " << msg << std::endl;
@@ -62,8 +62,9 @@ void set_single_string(const std::vector<std::string>& tokens,
 
   field = tokens[token_index++];
 
-  if (token_index >= tokens.size() || tokens[token_index++] != ";")
+  if (token_index >= tokens.size() || tokens[token_index] != ";")
     error_exit(directive_name + ": expected ';'");
+  token_index++;
 }
 
 void set_vector_string(const std::vector<std::string>& tokens,
@@ -74,13 +75,13 @@ void set_vector_string(const std::vector<std::string>& tokens,
 
   while (token_index < tokens.size() && tokens[token_index] != ";") {
     field.push_back(tokens[token_index]);
-    ++token_index;
+    token_index++;
   }
 
-  if (token_index >= tokens.size() || tokens[token_index] != ";")
-    error_exit(directive_name + ": expected ';'");
-
-  ++token_index;
+  if (token_index >= tokens.size()) {
+    error_exit(directive_name + ": missing ';'");
+  }
+  token_index++;
 }
 
 std::string to_string_long(long v) {

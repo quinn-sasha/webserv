@@ -3,6 +3,7 @@
 #include "config_utils.hpp"
 #include <algorithm>
 #include <sstream> 
+#include "string_utils.hpp"
 
 void parse_location_root_directive(const std::vector<std::string>& tokens,
                                    size_t& token_index, LocationContext& lc) {
@@ -31,6 +32,20 @@ void parse_allow_methods_directive(const std::vector<std::string>& tokens,
   }
 }
 
+void parse_location_client_max_body_size_directive(const std::vector<std::string>& tokens,
+                                   size_t& token_index, LocationContext& lc) {
+  if (token_index >= tokens.size() || tokens[token_index] == ";") {
+    error_exit("client_max_body_size_directive must have at least one value");
+  }
+
+  lc.client_max_body_size = safe_strtol(tokens[token_index++], 0, __LONG_MAX__);
+
+  if (token_index >= tokens.size() || tokens[token_index] != ";") {
+    error_exit("Expected ';' after client_max_body_size values");
+  }
+  token_index++;
+}
+
 void parse_autoindex_directive(const std::vector<std::string>& tokens,
                                size_t& token_index, LocationContext& lc) {
   if (token_index >= tokens.size() || tokens[token_index] == ";") {
@@ -56,9 +71,9 @@ void parse_return_directive(const std::vector<std::string>& tokens,
                          ConfigLimits::kRedirectCodeMax);
 
   if (val != ConfigLimits::kMovedPermanently && val != ConfigLimits::kFound &&
-      val != ConfigLimits::kTemporaryRedirect &&
-      val != ConfigLimits::kPermanentRedirect) {
-    error_exit("Unsupported redirect status: " + to_string_long(val)); 
+      val != ConfigLimits::kSeeOther && val != ConfigLimits::kTemporaryRedirect &&
+      val != ConfigLimits::kPermanentRedirect ) {
+    error_exit("Unsupported redirect status: " + int_to_string(val));
   }
   lc.redirect_status_code = static_cast<int>(val);
 
@@ -71,7 +86,18 @@ void parse_return_directive(const std::vector<std::string>& tokens,
     error_exit("Return 3xx directive requires a redirection URL");
   }
 
-  if (token_index >= tokens.size() || tokens[token_index++] != ";") {
+  if (token_index >= tokens.size() || tokens[token_index] != ";") {
     error_exit("Expected ';' after return values");
   }
+  token_index++;
+}
+
+void parse_cgi_extension_directive(const std::vector<std::string>& tokens,
+                            size_t& token_index, LocationContext& lc) {
+  set_single_string(tokens, token_index, lc.cgi_extension, "cgi_extension");
+}
+
+void parse_cgi_path_directive(const std::vector<std::string>& tokens,
+                            size_t& token_index, LocationContext& lc) {
+  set_single_string(tokens, token_index, lc.cgi_path, "cgi_path");
 }
