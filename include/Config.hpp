@@ -55,7 +55,7 @@ struct ServerContext {
   std::map<int, std::string> error_pages;
   std::vector<LocationContext> locations;
 
-  ServerContext() : server_root("./html"), client_max_body_size(ConfigLimits::kClientMaxBodyDefault) {}
+  ServerContext() : client_max_body_size(ConfigLimits::kClientMaxBodyDefault), server_root("./html"){}
   const LocationContext& get_matching_location(const std::string& uri) const;
 };
 

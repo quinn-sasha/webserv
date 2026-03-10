@@ -55,7 +55,7 @@ int convert_to_integer(int& result, const std::string& input, int base) {
   if (errno == ERANGE || tmp_res < INT_MIN || tmp_res > INT_MAX) {
     return -1;
   }
-  out = static_cast<int>(tmp_res);
+  result = static_cast<int>(tmp_res);
   return 0;
 }
 

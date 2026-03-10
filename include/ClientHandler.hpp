@@ -52,7 +52,7 @@ class ClientHandler : public MonitoredFdHandler {
   HandlerStatus handle_poll_error() { return kHandlerClosed; }
 
   // private:
-  bool handle_cgi(const Request& request, const std::string& script_path);
+  bool do_cgi(const Request& request, const std::string& script_path);
 
 
 };
