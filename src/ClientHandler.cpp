@@ -49,21 +49,30 @@ HandlerStatus ClientHandler::handle_input() {
   }
 
   // kParseFinished or some error status
-  ProcesseorResult result = RequestProcessor::process(status, parser_.get_request());
+  const Request& req = parser_.get_request();
+  std::string host_name = "";
 
-  if (result.next_action == ProcesseorResult::kExecuteCgi) {
+  // map::find を使って、const 安全に値を探す
+  std::map<std::string, std::string>::const_iterator it = req.headers.find("Host");
+  if (it != req.headers.end()) {
+    host_name = it->second;
+  }
+  const ServerContext& target_config = config_.get_config(std::stoi(port_), host_name);
+  ProcessorResult result = RequestProcessor::process(status, parser_.get_request(), target_config);
+
+  if (result.next_action == ProcessorResult::kExecuteCgi) {
     state_ = kExecutingCgi;
-    
+
     CgiHandler cgi(parser_.get_request());
     if (cgi.execute_cgi(result.script_path) == -1) {
       // Failed to execute CGI, send 500
-      response_.prepare_error_response(kInternalServerError); 
+      response_.prepare_error_response(kInternalServerError, RequestProcessor::get_error_page_path(target_config, kInternalServerError));
       response_str_ = response_.serialize();
       state_ = kSendingResponse;
       return kHandlerReceived;
     }
 
-    server_.register_cgi_fd(cgi.get_pipe_in_fd(), cgi.get_pipe_out_fd(), 
+    server_.register_cgi_fd(cgi.get_pipe_in_fd(), cgi.get_pipe_out_fd(),
                                 cgi.get_cgi_pid(),
                                 parser_.get_request().body, client_fd_);
 
@@ -74,7 +83,7 @@ HandlerStatus ClientHandler::handle_input() {
 
   // Normal response
   state_ = kSendingResponse;
-  response_ = result.response; // Maybe this copy is too heavy 
+  response_ = result.response; // Maybe this copy is too heavy
   response_str_ = response_.serialize();
   bytes_sent_ = 0;
   return kHandlerReceived;
@@ -89,18 +98,18 @@ HandlerStatus ClientHandler::handle_output() {
   }
 
   ssize_t remaining = response_str_.size() - bytes_sent_;
-  ssize_t num_sent = 
+  ssize_t num_sent =
       send(client_fd_, response_str_.data() + bytes_sent_, remaining, 0);
-  
+
   if (num_sent == -1) {
     return kHandlerClosed;
   }
-  
+
   bytes_sent_ += num_sent;
-  
+
   if (bytes_sent_ < response_str_.size()) {
     return kHandlerContinue;
   }
-  
+
   return kHandlerSent;
 }

@@ -2,6 +2,9 @@
 
 #include <iostream>
 #include <sstream>
+#include <cstdlib>
+#include <algorithm>
+#include <cerrno>
 
 void error_exit(const std::string& msg) {
   std::cerr << "Error: " << msg << std::endl;
@@ -15,7 +18,7 @@ void check_ip_format(const std::string& ip) {
   std::string segment;
   int count = 0;
 
-  if (std::count(ip.begin(), ip.end(), ".") != 3) {
+  if (std::count(ip.begin(), ip.end(), '.') != 3) {
     error_exit("Invalid IP format: '" + ip + "' (must bi x.x.x.x)");
   }
 
@@ -51,27 +54,31 @@ long safe_strtol(const std::string& str, long min_val, long max_val) {
 }
 
 void set_single_string(const std::vector<std::string>& tokens,
-                       size_t token_index, std::string& field,
+                       size_t& token_index, std::string& field,
                        const std::string& directive_name) {
   if (token_index >= tokens.size() || tokens[token_index] == ";")
     error_exit(directive_name + " needs a value");
 
   field = tokens[token_index++];
 
-  if (token_index >= tokens.size() || tokens[token_index++] != ";")
+  if (token_index >= tokens.size() || tokens[token_index] != ";")
     error_exit(directive_name + ": expected ';'");
+  token_index++;
 }
 
 void set_vector_string(const std::vector<std::string>& tokens,
-                       size_t token_index, std::vector<std::string>& field,
+                       size_t& token_index, std::vector<std::string>& field,
                        const std::string& directive_name) {
   if (token_index >= tokens.size() || tokens[token_index] == ";")
     error_exit(directive_name + " needs a value");
 
-  while (token_index < tokens.size() || tokens[token_index++] != ";") {
-    field.push_back(tokens[token_index++]);
+  while (token_index < tokens.size() && tokens[token_index] != ";") {
+    field.push_back(tokens[token_index]);
+    token_index++;
   }
 
-  if (token_index >= tokens.size() || tokens[token_index++] != ";")
-    error_exit(directive_name + ": expected ';'");
+  if (token_index >= tokens.size()) {
+    error_exit(directive_name + ": missing ';'");
+  }
+  token_index++;
 }

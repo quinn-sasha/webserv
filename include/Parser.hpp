@@ -5,16 +5,22 @@
 #include <list>
 #include <map>
 #include <string>
+#include <sys/types.h>
 
 enum ParserStatus {
-  kBadRequest,
-  kNotImplemented,
-  kUriTooLong,
-  kVersionNotSupported,
-  kMethodNotAllowed,
-  kContentTooLarge,
-  kRequestHeaderFieldsTooLarge,
-  kInternalServerError,
+  kOk = 200,
+  kCreated = 201,
+  kNoContent = 204,
+  kBadRequest = 400,
+  kForbidden = 403,
+  kNotFound = 404,
+  kMethodNotAllowed = 405,
+  kContentTooLarge = 413,
+  kUriTooLong = 414,
+  kRequestHeaderFieldsTooLarge = 431,
+  kInternalServerError = 500,
+  kNotImplemented = 501,
+  kVersionNotSupported = 505,
   // Custom status used in Parser class
   kParseContinue,
   kParseFinished,

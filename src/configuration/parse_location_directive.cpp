@@ -1,24 +1,25 @@
 #include "parse_location_directive.hpp"
 
 #include "config_utils.hpp"
+#include "string_utils.hpp"
 
 void parse_location_root_directive(const std::vector<std::string>& tokens,
-                                   size_t token_index, LocationContext& lc) {
+                                   size_t& token_index, LocationContext& lc) {
   set_single_string(tokens, token_index, lc.root, "root");
 }
 
 void parse_upload_store_directive(const std::vector<std::string>& tokens,
-                                  size_t token_index, LocationContext& lc) {
+                                  size_t& token_index, LocationContext& lc) {
   set_single_string(tokens, token_index, lc.upload_store, "upload_store");
 }
 
 void parse_location_index_directive(const std::vector<std::string>& tokens,
-                                    size_t token_index, LocationContext& lc) {
+                                    size_t& token_index, LocationContext& lc) {
   set_vector_string(tokens, token_index, lc.index, "index");
 }
 
 void parse_allow_methods_directive(const std::vector<std::string>& tokens,
-                                   size_t token_index, LocationContext& lc) {
+                                   size_t& token_index, LocationContext& lc) {
   set_vector_string(tokens, token_index, lc.allow_methods, "allow_methods");
   for (size_t i = 0; i < lc.allow_methods.size(); ++i) {
     std::transform(lc.allow_methods[i].begin(), lc.allow_methods[i].end(),
@@ -29,8 +30,22 @@ void parse_allow_methods_directive(const std::vector<std::string>& tokens,
   }
 }
 
+void parse_location_client_max_body_size_directive(const std::vector<std::string>& tokens,
+                                   size_t& token_index, LocationContext& lc) {
+  if (token_index >= tokens.size() || tokens[token_index] == ";") {
+    error_exit("client_max_body_size_directive must have at least one value");
+  }
+
+  lc.client_max_body_size = safe_strtol(tokens[token_index++], 0, __LONG_MAX__);
+
+  if (token_index >= tokens.size() || tokens[token_index] != ";") {
+    error_exit("Expected ';' after client_max_body_size values");
+  }
+  token_index++;
+}
+
 void parse_autoindex_directive(const std::vector<std::string>& tokens,
-                               size_t token_index, LocationContext& lc) {
+                               size_t& token_index, LocationContext& lc) {
   if (token_index >= tokens.size() || tokens[token_index] == ";") {
     error_exit("autoindex needs a value (on/off)");
   }
@@ -46,7 +61,7 @@ void parse_autoindex_directive(const std::vector<std::string>& tokens,
 }
 
 void parse_return_directive(const std::vector<std::string>& tokens,
-                            size_t token_index, LocationContext& lc) {
+                            size_t& token_index, LocationContext& lc) {
   if (token_index >= tokens.size() || tokens[token_index] == ";")
     error_exit("return directive needs a status code");
 
@@ -54,9 +69,9 @@ void parse_return_directive(const std::vector<std::string>& tokens,
                          ConfigLimits::kRedirectCodeMax);
 
   if (val != ConfigLimits::kMovedPermanently && val != ConfigLimits::kFound &&
-      val != ConfigLimits::kTemporaryRedirect &&
-      val != ConfigLimits::kPermanentRedirect) {
-    error_exit("Unsupported redirect status: " + std::to_string(val));
+      val != ConfigLimits::kSeeOther && val != ConfigLimits::kTemporaryRedirect &&
+      val != ConfigLimits::kPermanentRedirect ) {
+    error_exit("Unsupported redirect status: " + int_to_string(val));
   }
   lc.redirect_status_code = static_cast<int>(val);
 
@@ -69,7 +84,18 @@ void parse_return_directive(const std::vector<std::string>& tokens,
     error_exit("Return 3xx directive requires a redirection URL");
   }
 
-  if (token_index >= tokens.size() || tokens[token_index++] != ";") {
+  if (token_index >= tokens.size() || tokens[token_index] != ";") {
     error_exit("Expected ';' after return values");
   }
+  token_index++;
+}
+
+void parse_cgi_extension_directive(const std::vector<std::string>& tokens,
+                            size_t& token_index, LocationContext& lc) {
+  set_single_string(tokens, token_index, lc.cgi_extension, "cgi_extension");
+}
+
+void parse_cgi_path_directive(const std::vector<std::string>& tokens,
+                            size_t& token_index, LocationContext& lc) {
+  set_single_string(tokens, token_index, lc.cgi_path, "cgi_path");
 }

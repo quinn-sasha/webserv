@@ -6,7 +6,7 @@
 /*   By: ikota <ikota@student.42tokyo.jp>           +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/02/24 14:48:42 by ikota             #+#    #+#             */
-/*   Updated: 2026/02/26 16:27:30 by ikota            ###   ########.fr       */
+/*   Updated: 2026/03/09 18:10:11 by ikota            ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -16,9 +16,10 @@
 #include "Config.hpp"
 #include "config_utils.hpp"
 #include "parse_location_directive.hpp"
+#include "string_utils.hpp"
 
 void parse_listen_directive(const std::vector<std::string>& tokens,
-                            size_t token_index, ServerContext& sc) {
+                            size_t& token_index, ServerContext& sc) {
   if (token_index >= tokens.size() || tokens[token_index] == ";") {
     error_exit("Empty listen");
   }
@@ -36,29 +37,30 @@ void parse_listen_directive(const std::vector<std::string>& tokens,
       std::string port_str = val.substr(colon_pos + 1);
       lc.port = static_cast<int>(safe_strtol(port_str, ConfigLimits::kPortMin,
                                              ConfigLimits::kPortMax));
-    } else {
+    }
+  } else {
       // PORT only
       lc.address = "0.0.0.0";
       lc.port = static_cast<int>(
           safe_strtol(val, ConfigLimits::kPortMin, ConfigLimits::kPortMax));
-    }
-
-    sc.listens.push_back(lc);
-    token_index++;
-
-    if (token_index >= tokens.size() || tokens[token_index++] != ";") {
-      error_exit("Expected ';'");
-    }
   }
+
+  sc.listens.push_back(lc);
+  token_index++;
+
+  if (token_index >= tokens.size() || tokens[token_index] != ";") {
+    error_exit("Expected ';'");
+  }
+  token_index++;
 }
 
 void parse_server_name_directive(const std::vector<std::string>& tokens,
-                                 size_t token_index, ServerContext& sc) {
+                                 size_t& token_index, ServerContext& sc) {
   set_vector_string(tokens, token_index, sc.server_names, "server_name");
 }
 
 void parse_client_max_body_size_directive(
-    const std::vector<std::string>& tokens, size_t token_index,
+    const std::vector<std::string>& tokens, size_t& token_index,
     ServerContext& sc) {
   if (token_index >= tokens.size() || tokens[token_index] == ";") {
     error_exit("client_max_body_size_directive must have at least one value");
@@ -66,53 +68,61 @@ void parse_client_max_body_size_directive(
 
   sc.client_max_body_size = safe_strtol(tokens[token_index++], 0, __LONG_MAX__);
 
-  if (token_index >= tokens.size() || tokens[token_index++] != ";") {
+  if (token_index >= tokens.size() || tokens[token_index] != ";") {
     error_exit("Expected ';' after client_max_body_size values");
   }
+  token_index++;
 }
 
 void parse_server_root_directive(const std::vector<std::string>& tokens,
-                                 size_t token_index, ServerContext& sc) {
-  set_single_string(tokens, token_index, sc.server_root, "server root");
+                                 size_t& token_index, ServerContext& sc) {
+  set_single_string(tokens, token_index, sc.server_root, "server_root");
 }
 
 void parse_server_index_directive(const std::vector<std::string>& tokens,
-                                  size_t token_index, ServerContext& sc) {
+                                  size_t& token_index, ServerContext& sc) {
   set_vector_string(tokens, token_index, sc.server_index, "index");
 }
 
 void parse_error_page_directive(const std::vector<std::string>& tokens,
-                                size_t token_index, ServerContext& sc) {
+                                size_t& token_index, ServerContext& sc) {
   std::vector<int> codes;
 
   if (token_index >= tokens.size() || tokens[token_index] == ";")
     error_exit("error_page directive needs values");
 
-  while (token_index < tokens.size() && tokens[token_index] != ";") {
-    codes.push_back(std::atoi(tokens[token_index].c_str()));
+  while (token_index < tokens.size() && is_digits(tokens[token_index])) {
+    long code = safe_strtol(tokens[token_index], 300 ,599);
+    codes.push_back(static_cast<int>(code));
     token_index++;
   }
-  if (codes.size() < 2) {
-    error_exit("error_page needs at least one code and a path");
+
+  if (codes.empty()) {
+    error_exit("error_page: at least one status code is required");
   }
 
-  std::string path = tokens[token_index - 1];
-  codes.pop_back();
+  if (token_index >= tokens.size() || tokens[token_index] == ";") {
+    error_exit("error_page: path is misssing");
+  }
+
+  std::string path = tokens[token_index++];
 
   for (size_t j = 0; j < codes.size(); ++j) {
     sc.error_pages[codes[j]] = path;
   }
 
-  if (token_index >= tokens.size() || tokens[token_index++] != ";") {
+  if (token_index >= tokens.size() || tokens[token_index] != ";") {
     error_exit("Expected ';' after error_page values");
   }
+  token_index++;
 }
 
-typedef void (*LocationParser)(const std::vector<std::string>&, size_t,
+typedef void (*LocationParser)(const std::vector<std::string>&, size_t&,
                                LocationContext&);
 
 void parse_location_directive(const std::vector<std::string>& tokens,
-                              size_t token_index, ServerContext& sc) {
+                              size_t& token_index, ServerContext& sc) {
+  (void)sc;
   LocationContext lc;
   lc.is_exact_match = false;
 
@@ -141,9 +151,11 @@ void parse_location_directive(const std::vector<std::string>& tokens,
     parsers["upload_store"] = parse_upload_store_directive;
     parsers["index"] = parse_location_index_directive;
     parsers["allow_methods"] = parse_allow_methods_directive;
+    parsers["client_max_body_size"] = parse_location_client_max_body_size_directive;
     parsers["autoindex"] = parse_autoindex_directive;
     parsers["return"] = parse_return_directive;
-    // TODO: parsers["cgi_extension"] = parse_cgi_extension_directive;
+    parsers["cgi_extension"] = parse_cgi_extension_directive;
+    parsers["cgi_path"] = parse_cgi_path_directive;
   }
 
   while (token_index < tokens.size() && tokens[token_index] != "}") {
@@ -154,6 +166,13 @@ void parse_location_directive(const std::vector<std::string>& tokens,
       error_exit("Unknown location directive: " + key);
     }
   }
+
+  sc.locations.push_back(lc);
+
+  if (token_index >=  tokens.size() || tokens[token_index] != "}") {
+    error_exit("Expected '}' at the end of location block");
+  }
+  token_index++;
 }
 
 const LocationContext& ServerContext::get_matching_location(
@@ -181,8 +200,10 @@ const LocationContext& ServerContext::get_matching_location(
       }
     }
   }
-  if (!best_match) {
-    throw std::runtime_error("get_matching_location(): location not found");
+  if (best_match == NULL) {
+    static LocationContext empty_lc;
+    empty_lc.path = "__NOT_FOUND__";
+    return empty_lc;
   }
   return *best_match;
 }
