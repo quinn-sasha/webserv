@@ -60,7 +60,7 @@ HandlerStatus ClientHandler::handle_input() {
   std::string host_name = "";
 
   // map::find を使って、const 安全に値を探す
-  std::map<std::string, std::string>::const_iterator it = req.headers.find("Host");
+  std::map<std::string, std::string>::const_iterator it = req.headers.find("host");
   if (it != req.headers.end()) {
     host_name = it->second;
   }
@@ -70,7 +70,7 @@ HandlerStatus ClientHandler::handle_input() {
   internal_redirect_count_ = 0;
 
   if (result.next_action == ProcessorResult::kExecuteCgi) {
-    if (!handle_cgi(current_request_, result.script_path)) {
+    if (!do_cgi(current_request_, result.script_path)) {
       return kHandlerReceived;
     }
     return kHandlerContinue;
@@ -109,7 +109,7 @@ HandlerStatus ClientHandler::handle_output() {
   return kHandlerSent;
 }
 
-bool ClientHandler::handle_cgi(const Request& request,
+bool ClientHandler::do_cgi(const Request& request,
                                            const std::string& script_path) {
   state_ = kExecutingCgi;
 
@@ -121,7 +121,7 @@ bool ClientHandler::handle_cgi(const Request& request,
   if (cgi.execute_cgi(script_path) == -1) {
     const Request& req = parser_.get_request();
     std::string host_name = "";
-    std::map<std::string, std::string>::const_iterator it = req.headers.find("Host");
+    std::map<std::string, std::string>::const_iterator it = req.headers.find("host");
     if (it != req.headers.end()) {
     host_name = it->second;
     }
@@ -182,7 +182,7 @@ void ClientHandler::cgi_local_redirect_ready(const std::string& location) {
   ++internal_redirect_count_;
       const Request& req = parser_.get_request();
       std::string host_name = "";
-      std::map<std::string, std::string>::const_iterator it = req.headers.find("Host");
+      std::map<std::string, std::string>::const_iterator it = req.headers.find("host");
       if (it != req.headers.end()) {
       host_name = it->second;
       }
@@ -203,7 +203,7 @@ void ClientHandler::cgi_local_redirect_ready(const std::string& location) {
 
   ProcessorResult result = RequestProcessor::process(kParseFinished, current_request_, target_config);
   if (result.next_action == ProcessorResult::kExecuteCgi) {
-    if (!handle_cgi(current_request_, result.script_path)) {
+    if (!do_cgi(current_request_, result.script_path)) {
       return;
     }
     return;
