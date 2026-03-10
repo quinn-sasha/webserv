@@ -15,7 +15,7 @@ class Response {
 
  public:
   void prepare_error_response(ParserStatus status, const std::string& path);
-  void prepare_success_response(ParserStatus status);  // TODO: add arguments
+  void prepare_success_response(ParserStatus status);
   void prepare_redirect_response(int status, const std::string& redirect_url);
   void set_body(const std::string& body);
   void add_header(const std::string& key, const std::string& value);

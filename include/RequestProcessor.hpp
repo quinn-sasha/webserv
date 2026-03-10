@@ -47,6 +47,7 @@ class RequestProcessor {
 public:
   static ProcessorResult process(
       ParserStatus status, const Request& request, const ServerContext& target_config);
+  static std::string get_error_page_path(const ServerContext& target_config, ParserStatus status);
 };
 
 #endif  // INCLUDE_REQUESTPROCESSOR_HPP_

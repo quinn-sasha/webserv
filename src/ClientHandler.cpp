@@ -49,7 +49,15 @@ HandlerStatus ClientHandler::handle_input() {
   }
 
   // kParseFinished or some error status
-  const ServerContext& target_config = config_.get_config(my_port, host_name);
+  const Request& req = parser_.get_request();
+  std::string host_name = "";
+
+  // map::find を使って、const 安全に値を探す
+  std::map<std::string, std::string>::const_iterator it = req.headers.find("Host");
+  if (it != req.headers.end()) {
+    host_name = it->second;
+  }
+  const ServerContext& target_config = config_.get_config(std::stoi(port_), host_name);
   ProcessorResult result = RequestProcessor::process(status, parser_.get_request(), target_config);
 
   if (result.next_action == ProcessorResult::kExecuteCgi) {
@@ -58,7 +66,7 @@ HandlerStatus ClientHandler::handle_input() {
     CgiHandler cgi(parser_.get_request());
     if (cgi.execute_cgi(result.script_path) == -1) {
       // Failed to execute CGI, send 500
-      response_.prepare_error_response(kInternalServerError, );
+      response_.prepare_error_response(kInternalServerError, RequestProcessor::get_error_page_path(target_config, kInternalServerError));
       response_str_ = response_.serialize();
       state_ = kSendingResponse;
       return kHandlerReceived;

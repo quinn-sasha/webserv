@@ -371,3 +371,32 @@ ProcessorResult RequestProcessor::process(
 
   return handle_static_file(request, path_only, lc, target_config);
 }
+
+std::string RequestProcessor::get_error_page_path(
+    const ServerContext& target_config, ParserStatus status) {
+
+  std::map<int, std::string>::const_iterator it = target_config.error_pages.find(status);
+  if (it == target_config.error_pages.end()) {
+    return "";
+  }
+
+  std::string error_uri = it->second;
+
+  const LocationContext& error_lc = target_config.get_matching_location(error_uri);
+
+  std::string root;
+
+  if (error_lc.path != "__NOT_FOUND__" && !error_lc.root.empty()) {
+    root = error_lc.root;
+  } else {
+    root = target_config.server_root; //server_rootにも入ってないかも
+  }
+
+  // 3. パスの結合
+  // URI の先頭にスラッシュがない場合のみ補完
+  if (!error_uri.empty() && error_uri[0] != '/') {
+    root += "/";
+  }
+
+  return root + error_uri;
+}

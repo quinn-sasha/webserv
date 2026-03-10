@@ -58,7 +58,7 @@ std::vector<std::string> Config::tokenize(const std::string& content) {
 
 static void finalize_location_context(ServerContext& sc, LocationContext& lc) {
   if (lc.root.empty()) {
-    if (sc.server_root.empty()) {
+    if (sc.server_root == "./html") {
       lc.root = "./html";
     } else {
       lc.root = sc.server_root;
