@@ -2,8 +2,9 @@
 #include <list>
 #include <sstream>
 #include <string>
+#include <cstdlib>
 #include <climits>
-#include <stdlib.h>
+#include <cerrno>
 #include "Parser.hpp"
 
 std::string to_lower(std::string s) {
@@ -51,13 +52,10 @@ int convert_to_integer(int& result, const std::string& input, int base) {
   if (*endptr != '\0') {
     return -1;
   }
-  if (tmp_res == LONG_MIN || tmp_res == LONG_MAX) {
+  if (errno == ERANGE || tmp_res < INT_MIN || tmp_res > INT_MAX) {
     return -1;
   }
-  if (tmp_res < INT_MIN || tmp_res > INT_MAX) {
-    return -1;
-  }
-  result = static_cast<int>(tmp_res);
+  out = static_cast<int>(tmp_res);
   return 0;
 }
 

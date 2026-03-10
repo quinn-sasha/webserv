@@ -19,13 +19,14 @@ void check_ip_format(const std::string& ip) {
   int count = 0;
 
   if (std::count(ip.begin(), ip.end(), '.') != 3) {
-    error_exit("Invalid IP format: '" + ip + "' (must bi x.x.x.x)");
+    error_exit("Invalid IP format: '" + ip + "' (must be x.x.x.x)");
   }
 
   while (std::getline(ss, segment, '.')) {
     if (segment.empty())
       error_exit("Invalid IP: empty segment in '" + ip + "'");
     safe_strtol(segment, 0, 255);
+    count++;
   }
 
   if (count != 4) {
@@ -81,4 +82,10 @@ void set_vector_string(const std::vector<std::string>& tokens,
     error_exit(directive_name + ": missing ';'");
   }
   token_index++;
+}
+
+std::string to_string_long(long v) {
+  std::ostringstream oss;
+  oss << v;
+  return oss.str();
 }

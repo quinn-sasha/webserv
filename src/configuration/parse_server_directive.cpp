@@ -1,17 +1,6 @@
-/* ************************************************************************** */
-/*                                                                            */
-/*                                                        :::      ::::::::   */
-/*   parse_server_directive.cpp                         :+:      :+:    :+:   */
-/*                                                    +:+ +:+         +:+     */
-/*   By: ikota <ikota@student.42tokyo.jp>           +#+  +:+       +#+        */
-/*                                                +#+#+#+#+#+   +#+           */
-/*   Created: 2026/02/24 14:48:42 by ikota             #+#    #+#             */
-/*   Updated: 2026/03/09 18:10:11 by ikota            ###   ########.fr       */
-/*                                                                            */
-/* ************************************************************************** */
-
 #include <stdexcept>
 #include <string>
+#include <cstdlib>
 
 #include "Config.hpp"
 #include "config_utils.hpp"
@@ -25,13 +14,14 @@ void parse_listen_directive(const std::vector<std::string>& tokens,
   }
 
   ListenConfig lc;
-  std::string val = tokens[token_index];
-  size_t colon_pos = val.find(':');
+  const std::string val = tokens[token_index++];
 
+  const size_t colon_pos = val.find(':');
   if (colon_pos != std::string::npos) {
-    // IP:PORT
+    // HOST:PORT
     lc.address = val.substr(0, colon_pos);
-    check_ip_format(lc.address);
+    std::string port_str = val.substr(colon_pos + 1);
+
     if (lc.address == "localhost") {
       lc.address = "127.0.0.1";
       std::string port_str = val.substr(colon_pos + 1);
@@ -121,8 +111,7 @@ typedef void (*LocationParser)(const std::vector<std::string>&, size_t&,
                                LocationContext&);
 
 void parse_location_directive(const std::vector<std::string>& tokens,
-                              size_t& token_index, ServerContext& sc) {
-  (void)sc;
+                              size_t& token_index, ServerContext& /* sc */) {
   LocationContext lc;
   lc.is_exact_match = false;
 
@@ -150,6 +139,7 @@ void parse_location_directive(const std::vector<std::string>& tokens,
     parsers["root"] = parse_location_root_directive;
     parsers["upload_store"] = parse_upload_store_directive;
     parsers["index"] = parse_location_index_directive;
+
     parsers["allow_methods"] = parse_allow_methods_directive;
     parsers["client_max_body_size"] = parse_location_client_max_body_size_directive;
     parsers["autoindex"] = parse_autoindex_directive;

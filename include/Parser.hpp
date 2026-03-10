@@ -5,6 +5,7 @@
 #include <list>
 #include <map>
 #include <string>
+#include <cstdlib>
 #include <sys/types.h>
 
 enum ParserStatus {

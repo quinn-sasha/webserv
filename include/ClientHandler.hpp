@@ -2,6 +2,7 @@
 #define INCLUDE_CLIENTHANDLER_HPP_
 
 #include <sys/socket.h>
+
 #include <cstddef>
 #include <string>
 
@@ -16,6 +17,7 @@ class ClientHandler : public MonitoredFdHandler {
   int client_fd_;
   std::string addr_;
   std::string port_;
+  std::string client_addr_;
   Server& server_;
   const Config& config_;
   static const std::size_t buf_size = SO_RCVBUF;
@@ -24,6 +26,9 @@ class ClientHandler : public MonitoredFdHandler {
   Response response_;
   std::size_t bytes_sent_;
   std::string response_str_;
+  Request current_request_;
+  int internal_redirect_count_;
+  static const int kMaxInternalRedirects = 5;
 
   enum State {
     kReceiving,
@@ -34,14 +39,22 @@ class ClientHandler : public MonitoredFdHandler {
 
   ClientHandler(const ClientHandler& other);
   ClientHandler& operator=(const ClientHandler& other);
-  
+
  public:
   ClientHandler(int client_fd, const std::string& addr, const std::string& port,
-                Server& server, Config& config);
+                const std::string& client_addr, Server& server, Config& config);
   ~ClientHandler();
+  void cgi_response_ready(const std::string& response);
+  void cgi_local_redirect_ready(const std::string& location);
+  void setup_cgi_(std::string& server_name, std::string& remote_addr) const;
   HandlerStatus handle_input();
   HandlerStatus handle_output();
   HandlerStatus handle_poll_error() { return kHandlerClosed; }
+
+  // private:
+  bool handle_cgi(const Request& request, const std::string& script_path);
+
+
 };
 
 #endif  // INCLUDE_CLIENTHANDLER_HPP_
