@@ -61,7 +61,7 @@ HandlerStatus ClientHandler::handle_input() {
   internal_redirect_count_ = 0;
 
   if (result.next_action == ProcessorResult::kExecuteCgi) {
-    if (!do_cgi(current_request_, result.script_path,
+    if (!do_cgi_(current_request_, result.script_path,
                 result.cgi_path, result.query_string)) {
       return kHandlerReceived;
     }
@@ -100,7 +100,7 @@ HandlerStatus ClientHandler::handle_output() {
   return kHandlerSent;
 }
 
-bool ClientHandler::do_cgi(const Request& request,
+bool ClientHandler::do_cgi_(const Request& request,
                            const std::string& script_path,
                            const std::string& cgi_path,
                            const std::string& query_string) {
@@ -112,12 +112,7 @@ bool ClientHandler::do_cgi(const Request& request,
 
   CgiHandler cgi(request, query_string, server_name, port_, remote_addr);
   if (cgi.execute_cgi(script_path, cgi_path) == -1) {
-    refresh_current_request_();
-    const ServerContext& target_config = set_up_target_config_();
-    response_.prepare_error_response(kInternalServerError, RequestProcessor::get_error_page_path(target_config, kInternalServerError));
-    response_str_ = response_.serialize();
-    state_ = kSendingResponse;
-    server_.set_fd_events(client_fd_, POLLOUT);
+    send_error_response_(kInternalServerError);
     return false;
   }
 
@@ -165,7 +160,7 @@ void ClientHandler::cgi_response_ready(const std::string& response) {
 
 void ClientHandler::cgi_local_redirect_ready(const std::string& location) {
   if (location.empty() || location[0] != '/') {
-    cgi_response_ready("HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n");
+    send_error_response_(kBadGateway);
     return;
   }
 
@@ -173,19 +168,16 @@ void ClientHandler::cgi_local_redirect_ready(const std::string& location) {
   refresh_current_request_();
   const ServerContext& target_config = set_up_target_config_();
   if (internal_redirect_count_ > kMaxInternalRedirects) {
-    response_.prepare_error_response(kInternalServerError, RequestProcessor::get_error_page_path(target_config, kInternalServerError));
-    response_str_ = response_.serialize();
-    bytes_sent_ = 0;
-    state_ = kSendingResponse;
-    server_.set_fd_events(client_fd_, POLLOUT);
+    send_error_response_(kInternalServerError);
     return;
   }
 
   current_request_.target = location;
 
-  ProcessorResult result = RequestProcessor::process(kParseFinished, current_request_, target_config);
+  ProcessorResult result =
+      RequestProcessor::process(kParseFinished, current_request_, target_config);
   if (result.next_action == ProcessorResult::kExecuteCgi) {
-    if (!do_cgi(current_request_, result.script_path,
+    if (!do_cgi_(current_request_, result.script_path,
                 result.cgi_path, result.query_string)) {
       return;
     }
@@ -193,10 +185,23 @@ void ClientHandler::cgi_local_redirect_ready(const std::string& location) {
   }
 
   response_ = result.response;
+  send_prepared_response_();
+}
+
+void ClientHandler::send_prepared_response_() {
   response_str_ = response_.serialize();
   bytes_sent_ = 0;
   state_ = kSendingResponse;
   server_.set_fd_events(client_fd_, POLLOUT);
+}
+
+void ClientHandler::send_error_response_(ParserStatus status) {
+  refresh_current_request_();
+  const ServerContext& target_config = set_up_target_config_();
+  response_.prepare_error_response(
+      status,
+      RequestProcessor::get_error_page_path(target_config, status));
+  send_prepared_response_();
 }
 
 void ClientHandler::refresh_current_request_() {

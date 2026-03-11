@@ -6,6 +6,8 @@
 #include <string>
 #include <sys/types.h>
 #include <stdint.h>
+#include <utility>
+#include <vector>
 
 class Server;  
 class ClientHandler;
@@ -14,9 +16,19 @@ class CgiResponseHandler : public MonitoredFdHandler {
  public:
    struct ParsedCgiOutput {
     bool is_local_redirect;
+    bool is_valid;
+    int status_code;
     std::string local_location;
-    std::string response;
-    ParsedCgiOutput() : is_local_redirect(false), local_location(), response() {}
+    std::vector<std::pair<std::string, std::string> > headers;
+    std::string body;
+
+    ParsedCgiOutput()
+        : is_local_redirect(false),
+          is_valid(false),
+          status_code(200),
+          local_location(),
+          headers(),
+          body() {}
   };
 
   CgiResponseHandler(int out_fd, pid_t cgi_pid, ClientHandler* owner);
@@ -39,8 +51,7 @@ class CgiResponseHandler : public MonitoredFdHandler {
 
   void extend_deadline_on_activity_();
 
-  static std::string make_504_response_();
-  static std::string make_502_response_();
+
   static ParsedCgiOutput parse_cgi_output_(const std::string& cgi_output);
 
   int out_fd_;

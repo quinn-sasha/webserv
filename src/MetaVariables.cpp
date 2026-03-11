@@ -92,10 +92,8 @@ MetaVariables MetaVariables::from_request(const Request& request,
     env.content_type_ = request.headers.at("content-type");
   }
 
-  {
-    std::ostringstream oss;
-    oss << request.body.size();
-    env.content_length_ = oss.str();
+  if (request.headers.count("content-length")) {
+    env.content_length_ = request.headers.at("content-length");
   }
 
   env.meta_variables_["SCRIPT_NAME"] = script_name;
