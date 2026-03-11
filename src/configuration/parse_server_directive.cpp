@@ -142,8 +142,7 @@ void parse_location_directive(const std::vector<std::string>& tokens,
     parsers["client_max_body_size"] = parse_location_client_max_body_size_directive;
     parsers["autoindex"] = parse_autoindex_directive;
     parsers["return"] = parse_return_directive;
-    parsers["cgi_extension"] = parse_cgi_extension_directive;
-    parsers["cgi_path"] = parse_cgi_path_directive;
+    parsers["cgi_handler"] = parse_cgi_handlers_directive;
   }
 
   while (token_index < tokens.size() && tokens[token_index] != "}") {

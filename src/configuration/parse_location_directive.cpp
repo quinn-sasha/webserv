@@ -2,7 +2,7 @@
 
 #include "config_utils.hpp"
 #include <algorithm>
-#include <sstream> 
+#include <sstream>
 #include "string_utils.hpp"
 
 void parse_location_root_directive(const std::vector<std::string>& tokens,
@@ -92,12 +92,23 @@ void parse_return_directive(const std::vector<std::string>& tokens,
   token_index++;
 }
 
-void parse_cgi_extension_directive(const std::vector<std::string>& tokens,
+void parse_cgi_handlers_directive(const std::vector<std::string>& tokens,
                             size_t& token_index, LocationContext& lc) {
-  set_single_string(tokens, token_index, lc.cgi_extension, "cgi_extension");
-}
+  if (token_index >= tokens.size() || tokens[token_index] == ";") {
+    error_exit("Missing CGI extension in cgi_handler");
+  }
+  std::string extension = tokens[token_index++];
 
-void parse_cgi_path_directive(const std::vector<std::string>& tokens,
-                            size_t& token_index, LocationContext& lc) {
-  set_single_string(tokens, token_index, lc.cgi_path, "cgi_path");
+  if (token_index >= tokens.size() || tokens[token_index] == ";")
+    error_exit("Missing CGI binary path in cgi_handler");
+  std::string path = tokens[token_index++];
+
+  if (token_index >= tokens.size() || tokens[token_index] != ";")
+    error_exit("Expected ';' after cgi_handler");
+  token_index++;
+
+  CgiConfig handler;
+  handler.extension = extension;
+  handler.binary_path = path;
+  lc.cgi_handlers.push_back(handler);
 }

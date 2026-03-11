@@ -26,10 +26,7 @@ void parse_autoindex_directive(const std::vector<std::string>& tokens,
 void parse_return_directive(const std::vector<std::string>& tokens,
                             size_t& token_index, LocationContext& lc);
 
-void parse_cgi_extension_directive(const std::vector<std::string>& tokens,
-                            size_t& token_index, LocationContext& lc);
-
-void parse_cgi_path_directive(const std::vector<std::string>& tokens,
+void parse_cgi_handlers_directive(const std::vector<std::string>& tokens,
                             size_t& token_index, LocationContext& lc);
 
 #endif

@@ -68,28 +68,34 @@ bool RequestProcessor::is_method_allowed(HttpMethod method, const LocationContex
   return false;
 }
 
-static bool is_cgi_handler(const Request& request, const LocationContext& lc, std::string& path_only) {
+static bool is_cgi_handler(const LocationContext& lc,
+                           std::string& path_only, std::string& cgi_path) {
 
-  bool is_in_cgi_bin = (request.target.find("/cgi-bin") != std::string::npos);
-
-  if (is_in_cgi_bin && !lc.cgi_extension.empty() &&
-      path_only.size() >= lc.cgi_extension.size() &&
-      path_only.compare(path_only.size() - lc.cgi_extension.size(),
-                             lc.cgi_extension.size(), lc.cgi_extension) == 0) {
-    return true;
+  if (lc.cgi_handlers.empty()) {
+    return false;
   }
 
+  for (size_t i = 0; i < lc.cgi_handlers.size(); ++i) {
+    const std::string& extension = lc.cgi_handlers[i].extension;
+    if (!extension.empty() && path_only.size() >= extension.size() &&
+        path_only.compare(path_only.size() - extension.size(), extension.size(), extension) == 0) {
+          cgi_path = lc.cgi_handlers[i].binary_path;
+          return true;
+    }
+  }
   return false;
 }
 
 ProcessorResult RequestProcessor::handle_cgi(const std::string& path_only,
                                              const std::string& query_string,
+                                             const std::string& cgi_path,
                                              const Request& request,
                                              const LocationContext& lc,
                                              const ServerContext& target_config) {
   ProcessorResult result;
   result.next_action = ProcessorResult::kExecuteCgi;
   result.query_string = query_string;
+  result.cgi_path = cgi_path;
 
   std::string root;
   if (!lc.root.empty()) {
@@ -106,20 +112,13 @@ ProcessorResult RequestProcessor::handle_cgi(const std::string& path_only,
   }
 
   result.script_path = root + "/" + script_uri;
-  result.cgi_path = lc.cgi_path;
 
   if (result.cgi_path.empty()) {
     return handle_error(kInternalServerError, target_config);
   }
 
   if (access(result.script_path.c_str(), R_OK) != 0) {
-    if (errno == ENOENT) {
-        return handle_error(kNotFound, target_config);
-    } else if (errno == EACCES) {
-        return handle_error(kForbidden, target_config);
-    } else {
-        return handle_error(kInternalServerError, target_config);
-    }
+    return handle_error(errno_to_status(errno), target_config);
   }
 
   if (request.method == kPost) {
@@ -361,8 +360,9 @@ ProcessorResult RequestProcessor::process(
     path_only = path_only.substr(0, q_pos);
   }
 
-  if (is_cgi_handler(request, lc, path_only)) {
-    return handle_cgi(path_only, query_string, request, lc, target_config);
+  std::string cgi_path;
+  if (is_cgi_handler(lc, path_only, cgi_path)) {
+    return handle_cgi(path_only, query_string, cgi_path, request, lc, target_config);
   }
 
   if (request.method == kPost) {
