@@ -35,6 +35,7 @@ static int set_nonblocking(int fd) {
 }
 
 CgiHandler::CgiHandler(const Request& request,
+                       const std::string& query_string,
                        const std::string& server_name,
                        const std::string& server_port,
                        const std::string& remote_addr)
@@ -42,6 +43,7 @@ CgiHandler::CgiHandler(const Request& request,
       pipe_in_fd_(-1),
       pipe_out_fd_(-1),
       cgi_pid_(-1),
+      query_string_(query_string),
       server_name_(server_name),
       server_port_(server_port),
       remote_addr_(remote_addr) {}
@@ -91,29 +93,20 @@ static std::vector<std::string> shebang_tokens(const std::string& script_path) {
   return std::vector<std::string>();
 }
 
-static bool has_extension(const std::string& path, const std::string& ext) {
-  if (path.size() < ext.size()) {
-    return false;
-  }
-  return path.compare(path.size() - ext.size(), ext.size(), ext) == 0;
-}
-
-static CgiHandler::ExecArgv build_exec_argv(const std::string& script_path,
-                                           const std::string& script_name) {
+static CgiHandler::ExecArgv build_exec_argv(const std::string& script_name,
+                                            const std::string& cgi_path) {
   CgiHandler::ExecArgv execargv;
+  if (!is_executable_regular_file(script_name)) 
+  return execargv;
 
-  if (!is_executable_regular_file(script_path)) {
-    return execargv; //空で渡して後で error
-  }
-
-  if (has_extension(script_path, ".php")) {
-    execargv.file = "/usr/bin/php-cgi";
+  if (!cgi_path.empty()) {
+    execargv.file = cgi_path;
     execargv.argv.push_back(execargv.file);
     execargv.argv.push_back(script_name);
     return execargv;
   }
 
-  std::vector<std::string> shebang = shebang_tokens(script_path);
+  std::vector<std::string> shebang = shebang_tokens(script_name);
   if (!shebang.empty()) {
     execargv.file = shebang[0];
     execargv.argv = shebang;
@@ -126,7 +119,7 @@ static CgiHandler::ExecArgv build_exec_argv(const std::string& script_path,
   return execargv;
 }
 
-void CgiHandler::exec_cgi_child(int pipe_in[2], int pipe_out[2], const std::string& script_path) {
+void CgiHandler::exec_cgi_child(int pipe_in[2], int pipe_out[2], const std::string& script_path, const std::string& cgi_path) {
   close(pipe_in[1]);
   if (dup2(pipe_in[0], STDIN_FILENO) == -1) {
     cgi_error_exit("dup2(stdin)", -1);
@@ -152,15 +145,12 @@ void CgiHandler::exec_cgi_child(int pipe_in[2], int pipe_out[2], const std::stri
   }
 
   MetaVariables env = MetaVariables::from_request(request_, script_name,
-                                                  server_name_, server_port_, remote_addr_);
+                                                  query_string_,
+                                                  server_name_, server_port_,
+                                                  remote_addr_);
   char** envp = env.build_envp();
 
-  ExecArgv eargv = build_exec_argv(script_name, script_name);
-
-  // debug
-  // std::cerr << "[cgi] script_path=" << script_path << "\n";
-  // std::cerr << "[cgi] script_name=" << script_name << "\n";
-  // std::cerr << "[cgi] exec file=" << eargv.file << "\n";
+  ExecArgv eargv = build_exec_argv(script_name, cgi_path);
 
   std::vector<char*> argv_ptrs;
   argv_ptrs.reserve(eargv.argv.size() + 1);
@@ -174,7 +164,7 @@ void CgiHandler::exec_cgi_child(int pipe_in[2], int pipe_out[2], const std::stri
   cgi_error_exit("execve", 127);
 }
 
-int CgiHandler::execute_cgi(const std::string& script_path) {  
+int CgiHandler::execute_cgi(const std::string& script_path, const std::string& cgi_path) {  
   int pipe_in[2];
   int pipe_out[2];
 
@@ -195,10 +185,9 @@ int CgiHandler::execute_cgi(const std::string& script_path) {
   }
 
   if (cgi_pid_ == 0) {
-    exec_cgi_child(pipe_in, pipe_out, script_path);
+    exec_cgi_child(pipe_in, pipe_out, script_path, cgi_path);
   }
 
-  // 親プロセス
   close(pipe_in[0]);
   close(pipe_out[1]);
 

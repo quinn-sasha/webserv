@@ -88,8 +88,7 @@ static bool is_cgi_handler(const LocationContext& lc,
 
 ProcessorResult RequestProcessor::handle_cgi(const std::string& path_only,
                                              const std::string& query_string,
-                                             const std::string& cgi_path,
-                                             const Request& request,
+                                             const std::string& cgi_path,                                        
                                              const LocationContext& lc,
                                              const ServerContext& target_config) {
   ProcessorResult result;
@@ -121,11 +120,6 @@ ProcessorResult RequestProcessor::handle_cgi(const std::string& path_only,
     return handle_error(errno_to_status(errno), target_config);
   }
 
-  if (request.method == kPost) {
-    result.request_body = request.body;
-  } else {
-    result.request_body = "";
-  }
   return result;
 }
 
@@ -362,7 +356,7 @@ ProcessorResult RequestProcessor::process(
 
   std::string cgi_path;
   if (is_cgi_handler(lc, path_only, cgi_path)) {
-    return handle_cgi(path_only, query_string, cgi_path, request, lc, target_config);
+    return handle_cgi(path_only, query_string, cgi_path, lc, target_config);
   }
 
   if (request.method == kPost) {

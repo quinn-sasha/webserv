@@ -32,7 +32,6 @@ MetaVariables& MetaVariables::operator=(const MetaVariables& other) {
 }
 
 static std::string to_upper_http_env_key(const std::string& header_key) {
-  // "User-Agent" -> "HTTP_USER_AGENT"
   std::string out = "HTTP_";
   for (std::size_t i = 0; i < header_key.size(); ++i) {
     unsigned char c = static_cast<unsigned char>(header_key[i]);
@@ -59,6 +58,7 @@ static std::string method_to_str(HttpMethod method) {
 
 MetaVariables MetaVariables::from_request(const Request& request,
                                           const std::string& script_path,
+                                          const std::string& query_string,
                                           const std::string& server_name,
                                           const std::string& server_port,
                                           const std::string& remote_addr) {
@@ -66,14 +66,12 @@ MetaVariables MetaVariables::from_request(const Request& request,
 
   env.request_method_ = method_to_str(request.method);
   env.script_filename_ = script_path;
+  env.query_string_ = query_string;
 
   std::string full_path = request.target;
   std::size_t q_pos = full_path.find('?');
   if (q_pos != std::string::npos) {
-    env.query_string_ = full_path.substr(q_pos + 1);
     full_path = full_path.substr(0, q_pos);
-  } else {
-    env.query_string_ = "";
   }
 
   std::string script_name = full_path;
@@ -100,7 +98,6 @@ MetaVariables MetaVariables::from_request(const Request& request,
     env.content_length_ = oss.str();
   }
 
-  // --- ② Meta Variables (CGI Standard) ---
   env.meta_variables_["SCRIPT_NAME"] = script_name;
   env.meta_variables_["PATH_INFO"] = path_info;
   env.meta_variables_["SERVER_PROTOCOL"] = "HTTP/1.1";
@@ -139,20 +136,17 @@ void MetaVariables::add_to_list(std::vector<std::string>& list,
 char** MetaVariables::build_envp() const {
   std::vector<std::string> env_list;
 
-  // --- Add Special Variables ---
   add_to_list(env_list, "REQUEST_METHOD", request_method_);
   add_to_list(env_list, "SCRIPT_FILENAME", script_filename_);
   add_to_list(env_list, "QUERY_STRING", query_string_);
   add_to_list(env_list, "CONTENT_LENGTH", content_length_);
   add_to_list(env_list, "CONTENT_TYPE", content_type_);
 
-  // --- Add Meta Variables ---
   for (std::map<std::string, std::string>::const_iterator it = meta_variables_.begin();
        it != meta_variables_.end(); ++it) {
     add_to_list(env_list, it->first, it->second);
   }
 
-  // --- Add HTTP Headers ---
   for (std::map<std::string, std::string>::const_iterator it =
            http_headers_.begin();
        it != http_headers_.end(); ++it) {

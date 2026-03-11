@@ -19,7 +19,6 @@ struct ProcessorResult {
   std::string script_path; // CGIスクリプトのパスを保持
   std::string query_string;
   std::string cgi_path;
-  std::string request_body;
 };
 
 class RequestProcessor {
@@ -27,7 +26,7 @@ class RequestProcessor {
                     const ServerContext& target_config);
   static ProcessorResult handle_redirect(const LocationContext& lc);
   static ProcessorResult handle_cgi(const std::string& path_only, const std::string& query_string, const std::string& cgi_path,
-                                    const Request& request, const LocationContext& lc, const ServerContext& target_config);
+                                     const LocationContext& lc, const ServerContext& target_config);
   static std::string find_index_file(const std::string& directory_path, const LocationContext& lc);
   static ProcessorResult create_autoindex_response(const std::string& path,
                                                             const std::string& target);
