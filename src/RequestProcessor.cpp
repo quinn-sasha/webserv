@@ -199,6 +199,7 @@ ProcessorResult RequestProcessor::create_autoindex_response(
   body += http_constants::kHtmlEnd;
 
   result.response.set_body(body);
+  result.response.add_header("Content-Type", "text/html");
   result.response.prepare_success_response(kOk);
   result.next_action = ProcessorResult::kSendResponse;
   return result;
