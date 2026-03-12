@@ -56,7 +56,8 @@ class ClientHandler : public MonitoredFdHandler {
   const ServerContext& set_up_target_config_() const;
   bool do_cgi_(const Request& request, const std::string& script_path,
               const std::string& cgi_path,
-              const std::string& query_string);
+              const std::string& query_string,
+              const std::string& script_uri);
   void send_prepared_response_();
   void send_error_response_(ParserStatus status);
 

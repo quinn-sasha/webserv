@@ -20,6 +20,7 @@
 
 CgiHandler::CgiHandler(const Request& request,
                        const std::string& query_string,
+                       const std::string& script_uri,
                        const std::string& server_name,
                        const std::string& server_port,
                        const std::string& remote_addr)
@@ -28,6 +29,7 @@ CgiHandler::CgiHandler(const Request& request,
       pipe_out_fd_(-1),
       cgi_pid_(-1),
       query_string_(query_string),
+      script_uri_(script_uri),
       server_name_(server_name),
       server_port_(server_port),
       remote_addr_(remote_addr) {}
@@ -149,7 +151,7 @@ void CgiHandler::exec_cgi_child(int pipe_in[2], int pipe_out[2], const std::stri
   std::string script_name = prepare_script_name(script_path);
 
   MetaVariables env = \
-  MetaVariables::from_request(request_, script_name, query_string_,
+  MetaVariables::from_request(request_, script_uri_, query_string_,
                                   server_name_, server_port_, remote_addr_);
 
   ExecArgv eargv = build_exec_argv(script_name, cgi_path);

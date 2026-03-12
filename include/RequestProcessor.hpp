@@ -17,6 +17,7 @@ struct ProcessorResult {
   Response response;  // Needed if normal operation or error
   // Something CGI needs
   std::string script_path; // CGIスクリプトのパスを保持
+  std::string script_uri;
   std::string query_string;
   std::string cgi_path;
 };

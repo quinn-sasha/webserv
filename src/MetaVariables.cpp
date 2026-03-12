@@ -10,8 +10,7 @@ MetaVariables::MetaVariables() {}
 MetaVariables::~MetaVariables() {}
 
 MetaVariables::MetaVariables(const MetaVariables& other)
-    : script_filename_(other.script_filename_),
-      request_method_(other.request_method_),
+    : request_method_(other.request_method_),
       query_string_(other.query_string_),
       content_length_(other.content_length_),
       content_type_(other.content_type_),
@@ -20,7 +19,6 @@ MetaVariables::MetaVariables(const MetaVariables& other)
 
 MetaVariables& MetaVariables::operator=(const MetaVariables& other) {
   if (this != &other) {
-    script_filename_ = other.script_filename_;
     request_method_ = other.request_method_;
     query_string_ = other.query_string_;
     content_length_ = other.content_length_;
@@ -57,7 +55,7 @@ static std::string method_to_str(HttpMethod method) {
 }
 
 MetaVariables MetaVariables::from_request(const Request& request,
-                                          const std::string& script_path,
+                                          const std::string& script_uri,
                                           const std::string& query_string,
                                           const std::string& server_name,
                                           const std::string& server_port,
@@ -65,7 +63,6 @@ MetaVariables MetaVariables::from_request(const Request& request,
   MetaVariables env;
 
   env.request_method_ = method_to_str(request.method);
-  env.script_filename_ = script_path;
   env.query_string_ = query_string;
 
   std::string full_path = request.target;
@@ -76,16 +73,12 @@ MetaVariables MetaVariables::from_request(const Request& request,
 
   std::string script_name = full_path;
   std::string path_info = "";
-  std::string cgi_prefix = "/cgi-bin/";
-  std::size_t cgi_pos = full_path.find(cgi_prefix);
-  
-  if (cgi_pos != std::string::npos) {
-    std::size_t start_search = cgi_pos + cgi_prefix.length();
-    std::size_t next_slash = full_path.find('/', start_search);
-    if (next_slash != std::string::npos) {
-      script_name = full_path.substr(0, next_slash);
-      path_info = full_path.substr(next_slash);
-    }
+
+  if (!script_uri.empty() &&
+      full_path.size() >= script_uri.size() &&
+      full_path.compare(0, script_uri.size(), script_uri) == 0) {
+    script_name = script_uri;
+    path_info = full_path.substr(script_uri.size());
   }
 
   if (request.headers.count("content-type")) {
@@ -135,7 +128,6 @@ char** MetaVariables::build_envp() const {
   std::vector<std::string> env_list;
 
   add_to_list(env_list, "REQUEST_METHOD", request_method_);
-  add_to_list(env_list, "SCRIPT_FILENAME", script_filename_);
   add_to_list(env_list, "QUERY_STRING", query_string_);
   add_to_list(env_list, "CONTENT_LENGTH", content_length_);
   add_to_list(env_list, "CONTENT_TYPE", content_type_);
