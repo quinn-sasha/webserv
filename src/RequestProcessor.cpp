@@ -88,7 +88,7 @@ static bool is_cgi_handler(const LocationContext& lc,
 
 ProcessorResult RequestProcessor::handle_cgi(const std::string& path_only,
                                              const std::string& query_string,
-                                             const std::string& cgi_path,                                        
+                                             const std::string& cgi_path,
                                              const LocationContext& lc,
                                              const ServerContext& target_config) {
   ProcessorResult result;
