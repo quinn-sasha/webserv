@@ -143,8 +143,30 @@ void Response::set_body_and_content_length(const std::string& body) {
   ensure_content_length();
 }
 
+static std::string normalize_header_name(const std::string& key) {
+  std::string normalized;
+  normalized.reserve(key.size());
+
+  bool capitalize = true;
+  for (std::size_t i = 0; i < key.size(); ++i) {
+    unsigned char ch = static_cast<unsigned char>(key[i]);
+    if (ch == '-') {
+      normalized.push_back('-');
+      capitalize = true;
+      continue;
+    }
+    if (capitalize) {
+      normalized.push_back(static_cast<char>(std::toupper(ch)));
+      capitalize = false;
+    } else {
+      normalized.push_back(static_cast<char>(std::tolower(ch)));
+    }
+  }
+  return normalized;
+}
+
 void Response::add_header(const std::string& key, const std::string& value) {
-  headers_[key] = value;
+  headers_[normalize_header_name(key)] = value;
 }
 
 bool Response::fill_from_file(const std::string& path) {
@@ -174,3 +196,5 @@ std::string Response::get_mime_type(const std::string& path) {
 
   return "application/octet-stream";
 }
+
+

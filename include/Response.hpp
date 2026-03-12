@@ -22,7 +22,6 @@ class Response {
   void set_body(const std::string& body);
   void set_body_and_content_length(const std::string& body);
   void ensure_content_length();
-
   void add_header(const std::string& key, const std::string& value);
   std::string get_reason_phrase(int code);
   bool fill_from_file(const std::string& path);

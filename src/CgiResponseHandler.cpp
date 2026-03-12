@@ -64,7 +64,7 @@ static bool parse_status_code(const std::string& status_line, int& status_code) 
     return false;
   }
 
-  return status_code >= 100 && status_code <= 999;
+  return status_code >= 200 && status_code <= 599;
 }
 
 static bool iequal_key(const std::string& lhs, const std::string& rhs) {
