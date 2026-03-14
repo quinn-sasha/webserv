@@ -16,6 +16,7 @@ class CgiHandler {
 
   explicit CgiHandler(const Request& request,
                       const std::string& query_string,
+                      const std::string& script_uri,
                       const std::string& server_name,
                       const std::string& server_port,
                       const std::string& remote_addr);
@@ -33,6 +34,7 @@ class CgiHandler {
   int pipe_out_fd_;
   pid_t cgi_pid_;
   std::string query_string_;
+  std::string script_uri_;
   std::string server_name_;
   std::string server_port_;
   std::string remote_addr_;

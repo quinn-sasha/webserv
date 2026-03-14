@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 import os
 import sys
+import urllib.parse
 
-sys.stdout.write("Content-Type: text/html\r\n")
+sys.stdout.write("Content-Type: text/html; charset=utf-8\r\n")
 sys.stdout.write("\r\n")
 
 sys.stdout.write("<html>\n")
@@ -22,7 +23,9 @@ if os.environ.get("REQUEST_METHOD") == "POST":
     if content_length > 0:
         post_data = sys.stdin.read(content_length)
         sys.stdout.write("<h2>POST Data:</h2>\n")
-        sys.stdout.write(f"<pre>{post_data}</pre>\n")
+        decoded = urllib.parse.parse_qs(post_data)
+        for key, values in decoded.items():
+            sys.stdout.write(f"<li>{key}: {values[0]}</li>\n")
 
 sys.stdout.write("</body>\n</html>\n")
 sys.stdout.flush()

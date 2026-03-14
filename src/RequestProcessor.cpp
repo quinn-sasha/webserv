@@ -68,8 +68,8 @@ bool RequestProcessor::is_method_allowed(HttpMethod method, const LocationContex
   return false;
 }
 
-static bool is_cgi_handler(const LocationContext& lc,
-                           std::string& path_only, std::string& cgi_path) {
+static bool is_cgi_handler(const LocationContext& lc,std::string& path_only, 
+                            std::string& cgi_path,std::string& script_uri) {
 
   if (lc.cgi_handlers.empty()) {
     return false;
@@ -77,10 +77,19 @@ static bool is_cgi_handler(const LocationContext& lc,
 
   for (size_t i = 0; i < lc.cgi_handlers.size(); ++i) {
     const std::string& extension = lc.cgi_handlers[i].extension;
-    if (!extension.empty() && path_only.size() >= extension.size() &&
-        path_only.compare(path_only.size() - extension.size(), extension.size(), extension) == 0) {
-          cgi_path = lc.cgi_handlers[i].binary_path;
-          return true;
+    if (extension.empty()) {
+      continue;
+    }
+
+    std::size_t pos = path_only.find(extension);
+    while (pos != std::string::npos) {
+      std::size_t end = pos + extension.size();
+      if (end == path_only.size() || path_only[end] == '/') {
+        cgi_path = lc.cgi_handlers[i].binary_path;
+        script_uri = path_only.substr(0, end);
+        return true;
+      }
+      pos = path_only.find(extension, pos + 1);
     }
   }
   return false;
@@ -93,6 +102,7 @@ ProcessorResult RequestProcessor::handle_cgi(const std::string& path_only,
                                              const ServerContext& target_config) {
   ProcessorResult result;
   result.next_action = ProcessorResult::kExecuteCgi;
+  result.script_uri = path_only;
   result.query_string = query_string;
   result.cgi_path = cgi_path;
 
@@ -356,8 +366,9 @@ ProcessorResult RequestProcessor::process(
   }
 
   std::string cgi_path;
-  if (is_cgi_handler(lc, path_only, cgi_path)) {
-    return handle_cgi(path_only, query_string, cgi_path, lc, target_config);
+  std::string script_uri;
+  if (is_cgi_handler(lc, path_only, cgi_path, script_uri)) {
+    return handle_cgi(script_uri, query_string, cgi_path, lc, target_config);
   }
 
   if (request.method == kPost) {

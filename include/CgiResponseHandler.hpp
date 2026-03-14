@@ -3,6 +3,7 @@
 
 #include "ClientHandler.hpp"
 #include "MonitoredFdHandler.hpp"
+#include <map>
 #include <string>
 #include <sys/types.h>
 #include <stdint.h>
@@ -14,9 +15,19 @@ class CgiResponseHandler : public MonitoredFdHandler {
  public:
    struct ParsedCgiOutput {
     bool is_local_redirect;
+    bool is_valid;
+    int status_code;
     std::string local_location;
-    std::string response;
-    ParsedCgiOutput() : is_local_redirect(false), local_location(), response() {}
+    std::map<std::string, std::string> headers;
+    std::string body;
+
+    ParsedCgiOutput()
+        : is_local_redirect(false),
+          is_valid(false),
+          status_code(-1),
+          local_location(),
+          headers(),
+          body() {}
   };
 
   CgiResponseHandler(int out_fd, pid_t cgi_pid, ClientHandler* owner);
@@ -36,13 +47,14 @@ class CgiResponseHandler : public MonitoredFdHandler {
   static const int64_t kCgiTimeoutMs = 10000;   // 10s
   static const int64_t kCgiTimeoutSec = 10;   // 10s
   static const std::size_t kReadBufSize = 4096;
-
+  static const std::size_t kMaxCgiHeaderBytes = 16 * 1024;
+  static const std::size_t kMaxCgiOutputBytes = 8 * 1024 * 1024;
+  
+  CgiResponseHandler(const CgiResponseHandler&);
+  CgiResponseHandler& operator=(const CgiResponseHandler&);
   void extend_deadline_on_activity_();
-
-  static std::string make_504_response_();
-  static std::string make_502_response_();
   static ParsedCgiOutput parse_cgi_output_(const std::string& cgi_output);
-
+  HandlerStatus fail_with_bad_gateway_();
   int out_fd_;
   pid_t cgi_pid_;
   ClientHandler* owner_;
@@ -55,8 +67,6 @@ class CgiResponseHandler : public MonitoredFdHandler {
   int64_t last_activity_sec_;
   int64_t deadline_sec_;
 
-  CgiResponseHandler(const CgiResponseHandler&);
-  CgiResponseHandler& operator=(const CgiResponseHandler&);
 };
 
 

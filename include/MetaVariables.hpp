@@ -16,7 +16,7 @@ class MetaVariables {
   MetaVariables& operator=(const MetaVariables& other);
 
   static MetaVariables from_request(const Request& request,
-                                    const std::string& script_path,
+                                    const std::string& script_uri,
                                     const std::string& query_string,
                                     const std::string& server_name,
                                     const std::string& server_port,
@@ -26,8 +26,6 @@ class MetaVariables {
   static void destroy_envp(char** envp);
 
  private:
-
-  std::string script_filename_;
   std::string request_method_;
   std::string query_string_;
   std::string content_length_;

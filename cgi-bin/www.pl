@@ -67,7 +67,6 @@ print "REMOTE_IDENT = [ " . html($ENV{'REMOTE_IDENT'}) . " ]\n";
 print "REMOTE_USER = [ " . html($ENV{'REMOTE_USER'}) . " ]\n";
 print "REQUEST_METHOD = [ " . html($ENV{'REQUEST_METHOD'}) . " ]\n";
 print "SCRIPT_NAME = [ " . html($ENV{'SCRIPT_NAME'}) . " ]\n";
-print "SCRIPT_FILENAME = [ " . html($ENV{'SCRIPT_FILENAME'}) . " ]\n";
 print "SERVER_NAME = [ " . html($ENV{'SERVER_NAME'}) . " ]\n";
 print "SERVER_PORT = [ " . html($ENV{'SERVER_PORT'}) . " ]\n";
 print "SERVER_PROTOCOL = [ " . html($ENV{'SERVER_PROTOCOL'}) . " ]\n";
@@ -110,3 +109,5 @@ print <<EOF;
 </body>
 </html>
 EOF
+
+#curl -X POST -d "name=foo&age=20" http://localhost:8080/cgi-bin/www.pl

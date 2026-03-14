@@ -1,4 +1,5 @@
 #include "CgiResponseHandler.hpp"
+#include "Response.hpp"
 
 #include <unistd.h>
 #include <sys/wait.h>
@@ -14,9 +15,119 @@
 
 #include "Server.hpp"
 #include "ClientHandler.hpp"
+#include "string_utils.hpp"
 
+namespace cgi {
 static int64_t now_time_cgi_out() {
   return static_cast<int64_t>(std::time(NULL)); // 秒
+}
+
+
+
+static bool parse_status_code(const std::string& status_line, int& status_code) {
+  if (status_line.size() < 3) {
+    return false;
+  }
+
+  std::string code_str = status_line.substr(0, 3);
+  if (convert_to_integer(status_code, code_str, 10) == -1) {
+    return false;
+  }
+
+  return status_code >= 200 && status_code <= 599;
+}
+
+static std::string normalize_header_key(const std::string& key) {
+  std::string out;
+  out.reserve(key.size());
+  for (std::size_t i = 0; i < key.size(); ++i) {
+    out.push_back(
+        static_cast<char>(std::tolower(static_cast<unsigned char>(key[i]))));
+  }
+  return out;
+}
+
+static bool has_header_terminator(const std::string& data) {
+  return data.find("\r\n\r\n") != std::string::npos ||
+         data.find("\n\n") != std::string::npos;
+}
+
+static bool is_valid_header_name(const std::string& key) {
+  if (key.empty()) {
+    return false;
+  }
+  for (std::size_t i = 0; i < key.size(); ++i) {
+    unsigned char ch = static_cast<unsigned char>(key[i]);
+    if (ch <= 31 || ch == 127 || ch == ' ' || ch == '\t' || ch == ':') {
+      return false;
+    }
+  }
+  return true;
+}
+
+static Response build_response_from_parsed(
+    const CgiResponseHandler::ParsedCgiOutput& parsed) {
+  Response response;      
+  if (!parsed.is_valid) {
+    response.prepare_error_response(kBadGateway, "");
+    return response;
+  }
+
+  response.set_status_code(parsed.status_code);
+
+  for (std::map<std::string, std::string>::const_iterator it =
+           parsed.headers.begin();
+       it != parsed.headers.end(); ++it) {
+    response.add_header(it->first, it->second);
+  }
+
+  response.set_body(parsed.body);
+
+  if (parsed.headers.find("content-length") == parsed.headers.end() &&
+      parsed.headers.find("transfer-encoding") == parsed.headers.end()) {
+    response.ensure_content_length();
+  }
+
+  return response;
+}
+
+static bool parse_header_line(const std::string& line, bool& seen_status,
+                              std::string& status_line,
+                              std::map<std::string, std::string>& headers) {
+  std::size_t colon_pos = line.find(':');
+  if (line[0] == ' ' || line[0] == '\t' ||
+      colon_pos == std::string::npos) {
+    return false;
+  }
+
+  std::string key = line.substr(0, colon_pos);
+  if (!cgi::is_valid_header_name(key)) {
+    return false;
+  }
+
+  std::string normalized_key = normalize_header_key(key);
+  std::string value = trim(line.substr(colon_pos + 1), " \t");
+
+  if (normalized_key == "status") {
+    if (seen_status || value.empty()) {
+      return false;
+    }
+    seen_status = true;
+    status_line = value;
+    return true;
+  }
+
+  headers[normalized_key] = value;
+  return true;
+}
+}
+
+bool CgiResponseHandler::has_deadline() const { return true; }
+int64_t CgiResponseHandler::deadline_ms() const { return deadline_sec_; }
+
+void CgiResponseHandler::extend_deadline_on_activity_() {
+  last_activity_sec_ = cgi::now_time_cgi_out();
+  deadline_sec_ = last_activity_sec_ + kCgiTimeoutSec;
 }
 
 CgiResponseHandler::CgiResponseHandler(int out_fd, pid_t cgi_pid, Server& server, int client_fd)
@@ -26,7 +137,7 @@ CgiResponseHandler::CgiResponseHandler(int out_fd, pid_t cgi_pid, Server& server
       client_fd_(client_fd),
       cgi_output_(),
       finished_(false),
-      start_sec_(now_time_cgi_out()),
+      start_sec_(cgi::now_time_cgi_out()),
       last_activity_sec_(start_sec_) {
   deadline_sec_ = start_sec_ + kCgiTimeoutSec;
 }
@@ -44,44 +155,6 @@ CgiResponseHandler::~CgiResponseHandler() {
   }
 }
 
-bool CgiResponseHandler::has_deadline() const { return true; }
-int64_t CgiResponseHandler::deadline_ms() const { return deadline_sec_; }
-
-void CgiResponseHandler::extend_deadline_on_activity_() {
-  last_activity_sec_ = now_time_cgi_out();
-  deadline_sec_ = last_activity_sec_ + kCgiTimeoutSec;
-}
-
-std::string CgiResponseHandler::make_504_response_() {
-  const char* body = "<h1>504 Gateway Timeout</h1>";
-  std::ostringstream oss;
-  oss << "HTTP/1.1 504 Gateway Timeout\r\n"
-      << "Content-Type: text/html\r\n"
-      << "Content-Length: " << std::strlen(body) << "\r\n"
-      << "\r\n"
-      << body;
-  return oss.str();
-}
-
-std::string CgiResponseHandler::make_502_response_() {
-  const char* body = "<h1>502 Bad Gateway</h1>";
-  std::ostringstream oss;
-  oss << "HTTP/1.1 502 Bad Gateway\r\n"
-      << "Content-Type: text/html\r\n"
-      << "Content-Length: " << std::strlen(body) << "\r\n"
-      << "\r\n"
-      << body;
-  return oss.str();
-}
-
-static std::string key_to_lower_local(const std::string& str) {
-  std::string lower = str;
-  for (std::size_t i = 0; i < lower.size(); ++i) {
-    lower[i] = std::tolower(static_cast<unsigned char>(lower[i]));
-  }
-  return lower;
-}
-
 CgiResponseHandler::ParsedCgiOutput
 CgiResponseHandler::parse_cgi_output_(const std::string& cgi_output) {
   ParsedCgiOutput result;
@@ -90,7 +163,6 @@ CgiResponseHandler::parse_cgi_output_(const std::string& cgi_output) {
   if (body_start == std::string::npos) {
     body_start = cgi_output.find("\n\n");
     if (body_start == std::string::npos) {
-      result.response = make_502_response_();
       return result;
     }
     body_start += 2;
@@ -99,75 +171,56 @@ CgiResponseHandler::parse_cgi_output_(const std::string& cgi_output) {
   }
 
   std::string headers_str = cgi_output.substr(0, body_start);
-  std::string body = cgi_output.substr(body_start);
+  result.body = cgi_output.substr(body_start);
 
-  std::map<std::string, std::string> headers_map;
   std::istringstream headers_stream(headers_str);
   std::string line;
   std::string status_line;
+  bool seen_status = false;
 
   while (std::getline(headers_stream, line)) {
-    if (!line.empty() && line[line.size() - 1] == '\r') line.erase(line.size() - 1);
-    if (line.empty()) continue;
-
-    std::size_t colon_pos = line.find(':');
-    if (colon_pos == std::string::npos) continue;
-
-    std::string key = line.substr(0, colon_pos);
-    std::string value = line.substr(colon_pos + 1);
-    std::size_t value_start = value.find_first_not_of(" \t");
-    value = (value_start != std::string::npos) ? value.substr(value_start) : "";
-
-    std::string lower_key = key_to_lower_local(key);
-    if (lower_key == "status") status_line = value;
-    else headers_map[lower_key] = value;
+    if (!line.empty() && line[line.size() - 1] == '\r') {
+      line.erase(line.size() - 1);
+    }
+    if (line.empty()) {
+      continue;
+    }
+    if (!cgi::parse_header_line(line, seen_status, status_line, result.headers)) {
+      return ParsedCgiOutput();
+    }
   }
 
-  const bool has_content_type = headers_map.count("content-type") != 0;
-  const bool has_location = headers_map.count("location") != 0;
+  const std::map<std::string, std::string>::const_iterator content_type_it =
+      result.headers.find("content-type");
+  const std::map<std::string, std::string>::const_iterator location_it =
+      result.headers.find("location");
+
+  const bool has_content_type = content_type_it != result.headers.end();
+  const bool has_location = location_it != result.headers.end();
 
   if (!has_content_type && !has_location) {
-    result.response = make_502_response_();
     return result;
   }
 
-  // CGI local redirect:
-  // Location が "/" 始まり かつ Status 未指定
   if (has_location && status_line.empty()) {
-    const std::string& loc = headers_map["location"];
+    const std::string& loc = location_it->second;
     if (!loc.empty() && loc[0] == '/') {
       result.is_local_redirect = true;
       result.local_location = loc;
+      result.is_valid = true;
       return result;
     }
   }
 
   if (status_line.empty()) {
-    status_line = has_location ? "302 Found" : "200 OK";
-  }
-
-  std::ostringstream resp;
-  resp << "HTTP/1.1 " << status_line << "\r\n";
-
-  for (std::map<std::string, std::string>::iterator it = headers_map.begin();
-       it != headers_map.end(); ++it) {
-    std::string key = it->first;
-    if (!key.empty()) {
-      key[0] = std::toupper(static_cast<unsigned char>(key[0]));
-      for (std::size_t i = 1; i < key.size(); ++i) {
-        if (key[i - 1] == '-') key[i] = std::toupper(static_cast<unsigned char>(key[i]));
-      }
+    result.status_code = has_location ? 302 : 200;
+  } else {
+    if (!cgi::parse_status_code(status_line, result.status_code)) {
+      return ParsedCgiOutput();
     }
-    resp << key << ": " << it->second << "\r\n";
   }
 
-  if (headers_map.find("content-length") == headers_map.end() &&
-      headers_map.find("transfer-encoding") == headers_map.end()) {
-    resp << "Content-Length: " << body.size() << "\r\n";
-  }
-
-  resp << "\r\n" << body;
-  result.response = resp.str();
+  result.is_valid = true;
   return result;
 }
 
@@ -189,7 +242,9 @@ HandlerStatus CgiResponseHandler::handle_timeout() {
 
   ClientHandler* ch = server_.find_client_handler(client_fd_);
   if (ch != NULL) {
-    ch->cgi_response_ready(make_504_response_());
+    Response response;
+    response.prepare_error_response(kGatewayTimeout, "");
+    ch->cgi_response_ready(response.serialize());
   }
 
   return kCgiInputDone;
@@ -202,8 +257,7 @@ HandlerStatus CgiResponseHandler::handle_input() {
   ssize_t n = read(out_fd_, buf, sizeof(buf));
 
   if (n == -1) {
-    if (errno == EAGAIN || errno == EWOULDBLOCK) return kHandlerContinue;
-    return kHandlerClosed;
+    return handle_poll_error();
   }
 
   if (n == 0) {
@@ -214,7 +268,8 @@ HandlerStatus CgiResponseHandler::handle_input() {
       int status;
       pid_t wpid = waitpid(cgi_pid_, &status, 0);
       if (wpid == cgi_pid_) {
-        if ((WIFEXITED(status) && WEXITSTATUS(status) != 0) || WIFSIGNALED(status)) {
+        if ((WIFEXITED(status) && WEXITSTATUS(status) != 0) ||
+            WIFSIGNALED(status)) {
           cgi_error = true;
         }
       }
@@ -227,18 +282,31 @@ HandlerStatus CgiResponseHandler::handle_input() {
       if (parsed.is_local_redirect) {
         ch->cgi_local_redirect_ready(parsed.local_location);
       } else {
-        const bool parsed_is_502 = (parsed.response.find("HTTP/1.1 502") == 0);
-        const std::string resp = (!parsed_is_502) ? parsed.response
-                              : (cgi_error ? make_502_response_() : parsed.response);
-        ch->cgi_response_ready(resp);
+        Response response;
+        if (cgi_error || !parsed.is_valid) {
+          response.prepare_error_response(kBadGateway, "");
+        } else {
+          response = cgi::build_response_from_parsed(parsed);
+        }
+        ch->cgi_response_ready(response.serialize());
       }
     }
-
     return kCgiInputDone;
   }
 
   extend_deadline_on_activity_();
+
+  if (cgi_output_.size() + static_cast<std::size_t>(n) > kMaxCgiOutputBytes) {
+    return fail_with_bad_gateway_();
+  }
+
   cgi_output_.append(buf, n);
+
+  if (!cgi::has_header_terminator(cgi_output_) &&
+      cgi_output_.size() > kMaxCgiHeaderBytes) {
+    return fail_with_bad_gateway_();
+  }
+
   return kHandlerContinue;
 }
 
@@ -248,5 +316,32 @@ HandlerStatus CgiResponseHandler::handle_output() {
 
 HandlerStatus CgiResponseHandler::handle_poll_error() {
   std::cerr << "Error : CgiResponseHandler's poll" << std::endl;
-  return kHandlerClosed;
+  return fail_with_bad_gateway_();
 }
+
+HandlerStatus CgiResponseHandler::fail_with_bad_gateway_() {
+  finished_ = true;
+
+  if (cgi_pid_ > 0) {
+    kill(cgi_pid_, SIGKILL);
+    int status;
+    waitpid(cgi_pid_, &status, 0);
+    cgi_pid_ = -1;
+  }
+
+  if (out_fd_ != -1) {
+    close(out_fd_);
+    out_fd_ = -1;
+  }
+
+  ClientHandler* ch = server_.find_client_handler(client_fd_);
+  if (ch != NULL) {
+    Response response;
+    response.prepare_error_response(kBadGateway, "");
+    ch->cgi_response_ready(response.serialize());
+  }
+
+  return kCgiInputDone;
+}
+
+

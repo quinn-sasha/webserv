@@ -17,7 +17,11 @@ class Response {
   void prepare_error_response(ParserStatus status, const std::string& path);
   void prepare_success_response(ParserStatus status);
   void prepare_redirect_response(int status, const std::string& redirect_url);
+
+  void set_status_code(int code);
   void set_body(const std::string& body);
+  void set_body_and_content_length(const std::string& body);
+  void ensure_content_length();
   void add_header(const std::string& key, const std::string& value);
   std::string get_reason_phrase(int code);
   bool fill_from_file(const std::string& path);
