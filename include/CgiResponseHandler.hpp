@@ -40,11 +40,10 @@ class CgiResponseHandler : public MonitoredFdHandler {
 
   // timeout support
   virtual bool has_deadline() const;
-  virtual int64_t deadline_ms() const;
+  virtual int64_t deadline_sec() const;
   virtual HandlerStatus handle_timeout();
 
  private:
-  static const int64_t kCgiTimeoutMs = 10000;   // 10s
   static const int64_t kCgiTimeoutSec = 10;   // 10s
   static const std::size_t kReadBufSize = 4096;
   static const std::size_t kMaxCgiHeaderBytes = 16 * 1024;
@@ -52,9 +51,10 @@ class CgiResponseHandler : public MonitoredFdHandler {
   
   CgiResponseHandler(const CgiResponseHandler&);
   CgiResponseHandler& operator=(const CgiResponseHandler&);
-  void extend_deadline_on_activity_();
+  void extend_deadline_();
   static ParsedCgiOutput parse_cgi_output_(const std::string& cgi_output);
   HandlerStatus fail_with_bad_gateway_();
+  void stop_cgi_();
   int out_fd_;
   pid_t cgi_pid_;
   ClientHandler* owner_;

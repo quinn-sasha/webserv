@@ -19,10 +19,8 @@
 
 namespace cgi {
 static int64_t now_time_cgi_out() {
-  return static_cast<int64_t>(std::time(NULL)); // 秒
+  return static_cast<int64_t>(std::time(NULL));
 }
-
-
 
 static bool parse_status_code(const std::string& status_line, int& status_code) {
   if (status_line.size() < 3) {
@@ -123,11 +121,12 @@ static bool parse_header_line(const std::string& line, bool& seen_status,
 }
 
 bool CgiResponseHandler::has_deadline() const { return true; }
-int64_t CgiResponseHandler::deadline_ms() const { return deadline_sec_; }
+int64_t CgiResponseHandler::deadline_sec() const { return deadline_sec_; }
 
-void CgiResponseHandler::extend_deadline_on_activity_() {
+void CgiResponseHandler::extend_deadline_() {
   last_activity_sec_ = cgi::now_time_cgi_out();
   deadline_sec_ = last_activity_sec_ + kCgiTimeoutSec;
+  server_.update_timeout(out_fd_);
 }
 
 CgiResponseHandler::CgiResponseHandler(int out_fd, pid_t cgi_pid, Server& server, int client_fd)
@@ -143,14 +142,19 @@ CgiResponseHandler::CgiResponseHandler(int out_fd, pid_t cgi_pid, Server& server
 }
 
 CgiResponseHandler::~CgiResponseHandler() {
+  stop_cgi_();
+}
+
+void CgiResponseHandler::stop_cgi_() {
   if (out_fd_ != -1) {
     close(out_fd_);
     out_fd_ = -1;
   }
 
   if (cgi_pid_ > 0) {
+    kill(cgi_pid_, SIGKILL);
     int status;
-    waitpid(cgi_pid_, &status, WNOHANG);
+    waitpid(cgi_pid_, &status, 0);
     cgi_pid_ = -1;
   }
 }
@@ -227,19 +231,7 @@ CgiResponseHandler::parse_cgi_output_(const std::string& cgi_output) {
 HandlerStatus CgiResponseHandler::handle_timeout() {
   if (finished_) return kCgiInputDone;
   finished_ = true;
-
-  if (cgi_pid_ > 0) {
-    kill(cgi_pid_, SIGKILL);
-    int status;
-    waitpid(cgi_pid_, &status, 0);
-    cgi_pid_ = -1;
-  }
-
-  if (out_fd_ != -1) {
-    close(out_fd_);
-    out_fd_ = -1;
-  }
-
+  stop_cgi_();
   ClientHandler* ch = server_.find_client_handler(client_fd_);
   if (ch != NULL) {
     Response response;
@@ -294,7 +286,7 @@ HandlerStatus CgiResponseHandler::handle_input() {
     return kCgiInputDone;
   }
 
-  extend_deadline_on_activity_();
+  extend_deadline_();
 
   if (cgi_output_.size() + static_cast<std::size_t>(n) > kMaxCgiOutputBytes) {
     return fail_with_bad_gateway_();
@@ -322,17 +314,7 @@ HandlerStatus CgiResponseHandler::handle_poll_error() {
 HandlerStatus CgiResponseHandler::fail_with_bad_gateway_() {
   finished_ = true;
 
-  if (cgi_pid_ > 0) {
-    kill(cgi_pid_, SIGKILL);
-    int status;
-    waitpid(cgi_pid_, &status, 0);
-    cgi_pid_ = -1;
-  }
-
-  if (out_fd_ != -1) {
-    close(out_fd_);
-    out_fd_ = -1;
-  }
+  stop_cgi_();
 
   ClientHandler* ch = server_.find_client_handler(client_fd_);
   if (ch != NULL) {
@@ -343,5 +325,3 @@ HandlerStatus CgiResponseHandler::fail_with_bad_gateway_() {
 
   return kCgiInputDone;
 }
-
-

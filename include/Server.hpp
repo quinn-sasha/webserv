@@ -12,6 +12,8 @@
 #include "ListenSocket.hpp"
 #include "MonitoredFdHandler.hpp"
 
+#include "TimeoutManager.hpp"
+
 class ClientHandler;
 
 class Server {
@@ -21,14 +23,12 @@ class Server {
   std::vector<struct pollfd> poll_fds_;
   std::map<int, MonitoredFdHandler*> monitored_fd_to_handler_;
   Config config_;
+  TimeoutManager timeout_manager_;
 
-  static int64_t now_time_server_();
-  static int poll_timeout_sec_(int64_t ms);
-
-  // timeout計算・poll・timeout処理までをまとめて行う
-  bool poll_with_deadlines_(int& poll_ret);
-  // poll_ret==0 のときの timeout 処理の中身
   bool handle_timeouts_();
+  
+  // 指定したFDのインデックスを返す。見つからなければ -1
+  int find_pollfd_index_(int fd) const;
 
  public:
   Server(const std::string& config_file);
@@ -45,6 +45,7 @@ class Server {
 
   void register_fd(int fd, MonitoredFdHandler* handler, short events);
   void set_fd_events(int fd, short events);
+  void update_timeout(int fd);
 
   ClientHandler* find_client_handler(int client_fd);
 };

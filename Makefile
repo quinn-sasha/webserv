@@ -14,7 +14,7 @@ SRCS_NO_MAIN := $(SRC_DIR)/AcceptHandler.cpp \
                 $(SRC_DIR)/RequestProcessor.cpp \
                 $(SRC_DIR)/Response.cpp \
                 $(SRC_DIR)/Server.cpp \
-                $(SRC_DIR)/timeout.cpp \
+                $(SRC_DIR)/TimeoutManager.cpp \
                 $(SRC_DIR)/pollfd_utils.cpp \
                 $(SRC_DIR)/string_utils.cpp \
                 $(SRC_DIR)/signal_utils.cpp \
