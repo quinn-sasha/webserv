@@ -25,6 +25,7 @@ std::string Response::get_reason_phrase(int code) {
   switch (code) {
     case 200: return "OK";
     case 201: return "Created";
+    case 204: return "NoContent";
     case 301: return "Moved Permanently";
     case 302: return "Found";
     case 400: return "Bad Request";
@@ -33,6 +34,7 @@ std::string Response::get_reason_phrase(int code) {
     case 405: return "Method Not Allowed";
     case 413: return "Content Too Large";
     case 414: return "URI Too Long";
+    case 431: return "RequestHeaderFieldsTooLarge";
     case 500: return "Internal Server Error";
     case 501: return "Not Implemented";
     case 502: return "Bad Gateway";
