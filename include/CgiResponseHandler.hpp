@@ -38,7 +38,6 @@ class CgiResponseHandler : public MonitoredFdHandler {
   HandlerStatus handle_output();
   HandlerStatus handle_poll_error();
 
-  // timeout support
   virtual bool has_deadline() const;
   virtual int64_t deadline_sec() const;
   virtual HandlerStatus handle_timeout();
@@ -51,10 +50,12 @@ class CgiResponseHandler : public MonitoredFdHandler {
   
   CgiResponseHandler(const CgiResponseHandler&);
   CgiResponseHandler& operator=(const CgiResponseHandler&);
-  void extend_deadline_();
+  void update_deadline_();
   static ParsedCgiOutput parse_cgi_output_(const std::string& cgi_output);
   HandlerStatus fail_with_bad_gateway_();
-  void stop_cgi_();
+  void cleanup_cgi_();
+  bool is_cgi_error_();
+  void handle_cgi_completion_(bool cgi_error);
   int out_fd_;
   pid_t cgi_pid_;
   ClientHandler* owner_;

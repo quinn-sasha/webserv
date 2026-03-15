@@ -18,7 +18,6 @@ class CgiInputHandler : public MonitoredFdHandler {
   HandlerStatus handle_output();
   HandlerStatus handle_poll_error();
 
-  // timeout support
   virtual bool has_deadline() const;
   virtual int64_t deadline_sec() const;
   virtual HandlerStatus handle_timeout();
@@ -26,7 +25,7 @@ class CgiInputHandler : public MonitoredFdHandler {
  private:
   static const int64_t kCgiInputTimeoutSec = 10;  // 10s
 
-  void extend_deadline_();
+  void update_deadline_();
   void close_in_fd_();
 
   int         pipe_in_fd_;

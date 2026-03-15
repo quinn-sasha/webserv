@@ -26,17 +26,14 @@ class MetaVariables {
   static void destroy_envp(char** envp);
 
  private:
-  std::string request_method_;
-  std::string query_string_;
-  std::string content_length_;
-  std::string content_type_;
-
   std::map<std::string, std::string> meta_variables_;
-
   std::map<std::string, std::string> http_headers_;
 
   void add_to_list(std::vector<std::string>& list, const std::string& key,
                    const std::string& value) const;
+
+  void set_content_meta_(const Request& request);
+  void set_http_headers_(const Request& request);
 };
 
 #endif  // INCLUDE_METAVARIABLES_HPP_
