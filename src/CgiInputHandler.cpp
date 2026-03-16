@@ -2,7 +2,6 @@
 #include "Server.hpp"
 
 #include <unistd.h>
-#include <cerrno>
 #include <cstring>
 #include <iostream>
 #include <ctime>
@@ -14,11 +13,13 @@ static int64_t now_time_cgi_in() {
 }
 
 CgiInputHandler::CgiInputHandler(int pipe_in_fd, pid_t cgi_pid,
-                                 const std::string& body, Server& server)
+                                 const std::string& body, Server& server,
+                                 int client_fd)
     : pipe_in_fd_(pipe_in_fd),
       cgi_pid_(cgi_pid),
       body_(body),
       bytes_written_(0),
+      client_fd_(client_fd),
       server_(server),
       start_sec_(now_time_cgi_in()),
       last_activity_sec_(start_sec_) {
@@ -43,6 +44,10 @@ void CgiInputHandler::update_deadline_() {
   last_activity_sec_ = now_time_cgi_in();
   deadline_sec_ = last_activity_sec_ + kCgiInputTimeoutSec;
   server_.update_timeout(pipe_in_fd_);
+  // Keep the parent connection alive while CGI stdin is still flowing.
+  if (client_fd_ >= 0) {
+    server_.update_timeout(client_fd_);
+  }
 }
 
 HandlerStatus CgiInputHandler::handle_timeout() {

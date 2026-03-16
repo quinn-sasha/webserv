@@ -4,7 +4,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <cerrno>
 #include <cstdlib>  
 #include <cstring>
 #include <iostream>
@@ -127,7 +126,8 @@ bool ClientHandler::do_cgi_(const Request& request,
                       new CgiInputHandler(cgi.get_pipe_in_fd(),
                                           cgi.get_cgi_pid(),
                                           request.body,
-                                          server_),
+                                          server_,
+                                          client_fd_),
                       POLLOUT);
 
   server_.register_fd(cgi.get_pipe_out_fd(),

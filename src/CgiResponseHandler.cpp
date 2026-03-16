@@ -5,7 +5,6 @@
 #include <sys/wait.h>
 #include <signal.h>
 
-#include <cerrno>
 #include <cstring>
 #include <iostream>
 #include <sstream>
@@ -155,6 +154,10 @@ void CgiResponseHandler::update_deadline_() {
   last_activity_sec_ = cgi::now_time_cgi_out();
   deadline_sec_ = last_activity_sec_ + kCgiTimeoutSec;
   server_.update_timeout(out_fd_);
+  // Keep the parent connection alive while CGI stdout is still flowing.
+  if (client_fd_ >= 0) {
+    server_.update_timeout(client_fd_);
+  }
 }
 
 CgiResponseHandler::CgiResponseHandler(int out_fd, pid_t cgi_pid, Server& server, int client_fd)

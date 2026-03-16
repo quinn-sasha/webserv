@@ -126,10 +126,6 @@ ProcessorResult RequestProcessor::handle_cgi(const std::string& path_only,
     return handle_error(kInternalServerError, target_config);
   }
 
-  if (access(result.script_path.c_str(), R_OK) != 0) {
-    return handle_error(errno_to_status(errno), target_config);
-  }
-
   return result;
 }
 

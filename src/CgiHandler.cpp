@@ -128,14 +128,14 @@ int CgiHandler::execute_cgi(const std::string& script_path, const std::string& c
   int pipe_out[2];
 
   if (pipe(pipe_in) == -1 || pipe(pipe_out) == -1) {
-    std::cerr << "Error: pipe " << strerror(errno) << "\n";
+    std::cerr << "Error: pipe " << "\n";
     return -1;
   }
 
   cgi_pid_ = fork();
 
   if (cgi_pid_ == -1) {
-    std::cerr << "Error: fork " << strerror(errno) << "\n";
+    std::cerr << "Error: fork "  << "\n";
     close(pipe_in[0]);  
     close(pipe_in[1]);
     close(pipe_out[0]); 
@@ -151,7 +151,7 @@ int CgiHandler::execute_cgi(const std::string& script_path, const std::string& c
   close(pipe_out[1]);
 
   if (set_nonblocking(pipe_in[1]) == -1 || set_nonblocking(pipe_out[0]) == -1) {
-    std::cerr << "Error: fcntl " << strerror(errno) << "\n";
+    std::cerr << "Error: fcntl "  << "\n";
     return -1;
   }
 

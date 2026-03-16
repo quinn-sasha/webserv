@@ -11,7 +11,8 @@ class Server;
 
 class CgiInputHandler : public MonitoredFdHandler {
  public:
-  CgiInputHandler(int pipe_in_fd, pid_t cgi_pid, const std::string& body, Server& server);
+  CgiInputHandler(int pipe_in_fd, pid_t cgi_pid, const std::string& body,
+                  Server& server, int client_fd);
   ~CgiInputHandler();
 
   HandlerStatus handle_input();
@@ -32,6 +33,7 @@ class CgiInputHandler : public MonitoredFdHandler {
   pid_t       cgi_pid_;
   std::string body_;
   std::size_t bytes_written_;
+  int         client_fd_;
   Server&     server_;
 
   // deadline state

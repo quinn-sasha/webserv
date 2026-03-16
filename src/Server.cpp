@@ -73,7 +73,6 @@ void Server::run() {
 
     int poll_ret = poll(&poll_fds_[0], poll_fds_.size(), timeout_ms);
     if (poll_ret == -1) {
-      if (errno == EINTR) continue;
       throw SystemError("poll");
     }
 

@@ -46,6 +46,28 @@ static std::string method_to_str(HttpMethod method) {
   }
 }
 
+static std::string set_up_full_path(const Request& request) {
+  std::string path = request.target;
+  std::size_t pos = path.find('?');
+  if (pos != std::string::npos) 
+    path = path.substr(0, pos);
+  return path;
+}
+
+static std::string set_up_http_version(const Request& request) {
+  if (request.version == kHttp10)
+    return "HTTP/1.0";
+  return "HTTP/1.1";
+}
+
+static std::string set_up_script_filename(const std::string& script_name) {
+  std::string filename = script_name;
+  std::size_t slash_pos = filename.find_last_of('/');
+  if (slash_pos != std::string::npos) 
+    filename = filename.substr(slash_pos + 1);
+  return filename;
+}
+
 void MetaVariables::set_content_meta_(const Request& request) {
   const bool has_content_length = request.headers.count("content-length") != 0;
   const bool has_transfer_encoding = request.headers.count("transfer-encoding") != 0;
@@ -84,32 +106,24 @@ MetaVariables MetaVariables::from_request(const Request& request,
                                           const std::string& remote_addr) {
   MetaVariables env;
 
-  std::string full_path = request.target;
-  std::size_t q_pos = full_path.find('?');
-  if (q_pos != std::string::npos) {
-    full_path = full_path.substr(0, q_pos);
-  }
+  std::string full_path = set_up_full_path(request);
 
   std::string script_name = full_path;
   std::string path_info = "";
-
   if (!script_uri.empty() && full_path.size() >= script_uri.size() &&
       full_path.compare(0, script_uri.size(), script_uri) == 0) {
     script_name = script_uri;
     path_info = full_path.substr(script_uri.size());
   }
 
-  std::string script_filename = script_name;
-  std::size_t slash_pos = script_filename.find_last_of('/');
-  if (slash_pos != std::string::npos) {
-    script_filename = script_filename.substr(slash_pos + 1);
-  }
-  
+  std::string http_version = set_up_http_version(request);
+  std::string script_filename = set_up_script_filename(script_name);
+
   env.meta_variables_["REQUEST_METHOD"] = method_to_str(request.method);
   env.meta_variables_["QUERY_STRING"] = query_string;
   env.meta_variables_["SCRIPT_NAME"] = script_name;
   env.meta_variables_["PATH_INFO"] = path_info;
-  env.meta_variables_["SERVER_PROTOCOL"] = "HTTP/1.1";
+  env.meta_variables_["SERVER_PROTOCOL"] = http_version;
   env.meta_variables_["GATEWAY_INTERFACE"] = "CGI/1.1";
   env.meta_variables_["SERVER_SOFTWARE"] = "webserv/1.0";
   env.meta_variables_["SERVER_NAME"] = server_name;
