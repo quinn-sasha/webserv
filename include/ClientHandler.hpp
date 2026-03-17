@@ -29,13 +29,26 @@ class ClientHandler : public MonitoredFdHandler {
   Request current_request_;
   int internal_redirect_count_;
   static const int kMaxInternalRedirects = 5;
-
   enum State {
     kReceiving,
     kExecutingCgi,
     kSendingResponse,
   };
   State state_;
+  int64_t last_activity_sec_;
+  int64_t deadline_sec_;
+
+  static const int64_t kClientTimeoutSec = 30; // 30s
+  void refresh_current_request_();
+  const ServerContext& set_up_target_config_() const;
+  bool do_cgi_(const Request& request, const std::string& script_path,
+              const std::string& cgi_path,
+              const std::string& query_string,
+              const std::string& script_uri);
+  void send_prepared_response_();
+  void send_error_response_(ParserStatus status);
+  void update_deadline_();
+  void start_sending_response_(const std::string& full_response);
 
   ClientHandler(const ClientHandler& other);
   ClientHandler& operator=(const ClientHandler& other);
@@ -51,15 +64,10 @@ class ClientHandler : public MonitoredFdHandler {
   HandlerStatus handle_output();
   HandlerStatus handle_poll_error() { return kHandlerClosed; }
 
- private:
-  void refresh_current_request_();
-  const ServerContext& set_up_target_config_() const;
-  bool do_cgi_(const Request& request, const std::string& script_path,
-              const std::string& cgi_path,
-              const std::string& query_string,
-              const std::string& script_uri);
-  void send_prepared_response_();
-  void send_error_response_(ParserStatus status);
+  // timeout API
+  virtual bool has_deadline() const { return true; }
+  virtual int64_t deadline_sec() const { return deadline_sec_; }
+  virtual HandlerStatus handle_timeout();
 
 };
 

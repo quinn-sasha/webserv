@@ -2,7 +2,7 @@
 import os
 import sys
 
-path = "../test_root/sample.png"
+path = "./sample.png"
 size = os.path.getsize(path)
 
 sys.stdout.write("Content-Type: image/png\r\n")

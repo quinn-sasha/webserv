@@ -5,7 +5,6 @@
 #include <sys/wait.h>
 #include <signal.h>
 
-#include <cerrno>
 #include <cstring>
 #include <iostream>
 #include <sstream>
@@ -19,10 +18,8 @@
 
 namespace cgi {
 static int64_t now_time_cgi_out() {
-  return static_cast<int64_t>(std::time(NULL)); // 秒
+  return static_cast<int64_t>(std::time(NULL));
 }
-
-
 
 static bool parse_status_code(const std::string& status_line, int& status_code) {
   if (status_line.size() < 3) {
@@ -120,14 +117,47 @@ static bool parse_header_line(const std::string& line, bool& seen_status,
   headers[normalized_key] = value;
   return true;
 }
+
+static bool apply_content_type_location_rules(
+    CgiResponseHandler::ParsedCgiOutput& result,
+    const std::string& status_line) {
+  const std::map<std::string, std::string>::const_iterator content_type_it =
+      result.headers.find("content-type");
+  const std::map<std::string, std::string>::const_iterator location_it =
+      result.headers.find("location");
+
+  const bool has_content_type = content_type_it != result.headers.end();
+  const bool has_location = location_it != result.headers.end();
+
+  if (!has_content_type && !has_location) {
+    return false; // not valid
+  }
+
+  if (has_location && status_line.empty()) {
+    const std::string& loc = location_it->second;
+    if (!loc.empty() && loc[0] == '/') {
+      result.is_local_redirect = true;
+      result.local_location = loc;
+      result.is_valid = true;
+      return true;
+    }
+  }
+
+  return true;
 }
+} //namespace
 
 bool CgiResponseHandler::has_deadline() const { return true; }
-int64_t CgiResponseHandler::deadline_ms() const { return deadline_sec_; }
+int64_t CgiResponseHandler::deadline_sec() const { return deadline_sec_; }
 
-void CgiResponseHandler::extend_deadline_on_activity_() {
+void CgiResponseHandler::update_deadline_() {
   last_activity_sec_ = cgi::now_time_cgi_out();
   deadline_sec_ = last_activity_sec_ + kCgiTimeoutSec;
+  server_.update_timeout(out_fd_);
+  // Keep the parent connection alive while CGI stdout is still flowing.
+  if (client_fd_ >= 0) {
+    server_.update_timeout(client_fd_);
+  }
 }
 
 CgiResponseHandler::CgiResponseHandler(int out_fd, pid_t cgi_pid, Server& server, int client_fd)
@@ -143,16 +173,58 @@ CgiResponseHandler::CgiResponseHandler(int out_fd, pid_t cgi_pid, Server& server
 }
 
 CgiResponseHandler::~CgiResponseHandler() {
+  cleanup_cgi_();
+}
+
+void CgiResponseHandler::cleanup_cgi_() {
   if (out_fd_ != -1) {
     close(out_fd_);
     out_fd_ = -1;
   }
 
   if (cgi_pid_ > 0) {
+    kill(cgi_pid_, SIGKILL);
     int status;
-    waitpid(cgi_pid_, &status, WNOHANG);
+    waitpid(cgi_pid_, &status, 0);
     cgi_pid_ = -1;
   }
+}
+
+bool CgiResponseHandler::is_cgi_error_() {
+  if (cgi_pid_ <= 0) {
+    return false;
+  }
+
+  int status;
+  pid_t wpid = waitpid(cgi_pid_, &status, 0);
+
+  if (wpid != cgi_pid_) {
+    return false;
+  }
+
+  return (WIFEXITED(status) && WEXITSTATUS(status) != 0) ||
+         WIFSIGNALED(status);
+}
+
+void CgiResponseHandler::handle_cgi_completion_(bool cgi_error) {
+  const ParsedCgiOutput parsed = parse_cgi_output_(cgi_output_);
+  ClientHandler* ch = server_.find_client_handler(client_fd_);
+  if (ch == NULL) {
+    return;
+  }
+
+  if (parsed.is_local_redirect) {
+    ch->cgi_local_redirect_ready(parsed.local_location);
+    return;
+  }
+
+  Response response;
+  if (cgi_error || !parsed.is_valid) {
+    response.prepare_error_response(kBadGateway, "");
+  } else {
+    response = cgi::build_response_from_parsed(parsed);
+  }
+  ch->cgi_response_ready(response.serialize());
 }
 
 CgiResponseHandler::ParsedCgiOutput
@@ -190,27 +262,15 @@ CgiResponseHandler::parse_cgi_output_(const std::string& cgi_output) {
     }
   }
 
-  const std::map<std::string, std::string>::const_iterator content_type_it =
-      result.headers.find("content-type");
-  const std::map<std::string, std::string>::const_iterator location_it =
-      result.headers.find("location");
-
-  const bool has_content_type = content_type_it != result.headers.end();
-  const bool has_location = location_it != result.headers.end();
-
-  if (!has_content_type && !has_location) {
+  if (!cgi::apply_content_type_location_rules(result, status_line)) {
+    return ParsedCgiOutput();  
+  }
+  if (result.is_local_redirect) {
     return result;
   }
 
-  if (has_location && status_line.empty()) {
-    const std::string& loc = location_it->second;
-    if (!loc.empty() && loc[0] == '/') {
-      result.is_local_redirect = true;
-      result.local_location = loc;
-      result.is_valid = true;
-      return result;
-    }
-  }
+  const bool has_location =
+      result.headers.find("location") != result.headers.end();
 
   if (status_line.empty()) {
     result.status_code = has_location ? 302 : 200;
@@ -225,21 +285,11 @@ CgiResponseHandler::parse_cgi_output_(const std::string& cgi_output) {
 }
 
 HandlerStatus CgiResponseHandler::handle_timeout() {
-  if (finished_) return kCgiInputDone;
+  if (finished_){ 
+    return kCgiInputDone;
+  }
   finished_ = true;
-
-  if (cgi_pid_ > 0) {
-    kill(cgi_pid_, SIGKILL);
-    int status;
-    waitpid(cgi_pid_, &status, 0);
-    cgi_pid_ = -1;
-  }
-
-  if (out_fd_ != -1) {
-    close(out_fd_);
-    out_fd_ = -1;
-  }
-
+  cleanup_cgi_();
   ClientHandler* ch = server_.find_client_handler(client_fd_);
   if (ch != NULL) {
     Response response;
@@ -251,8 +301,9 @@ HandlerStatus CgiResponseHandler::handle_timeout() {
 }
 
 HandlerStatus CgiResponseHandler::handle_input() {
-  if (finished_) return kCgiInputDone;
-
+  if (finished_) {
+    return kCgiInputDone;
+  }
   char buf[kReadBufSize];
   ssize_t n = read(out_fd_, buf, sizeof(buf));
 
@@ -262,39 +313,14 @@ HandlerStatus CgiResponseHandler::handle_input() {
 
   if (n == 0) {
     finished_ = true;
+    bool cgi_error = is_cgi_error_();
+    cgi_pid_ = -1;
 
-    bool cgi_error = false;
-    if (cgi_pid_ > 0) {
-      int status;
-      pid_t wpid = waitpid(cgi_pid_, &status, 0);
-      if (wpid == cgi_pid_) {
-        if ((WIFEXITED(status) && WEXITSTATUS(status) != 0) ||
-            WIFSIGNALED(status)) {
-          cgi_error = true;
-        }
-      }
-      cgi_pid_ = -1;
-    }
-
-    const ParsedCgiOutput parsed = parse_cgi_output_(cgi_output_);
-    ClientHandler* ch = server_.find_client_handler(client_fd_);
-    if (ch != NULL) {
-      if (parsed.is_local_redirect) {
-        ch->cgi_local_redirect_ready(parsed.local_location);
-      } else {
-        Response response;
-        if (cgi_error || !parsed.is_valid) {
-          response.prepare_error_response(kBadGateway, "");
-        } else {
-          response = cgi::build_response_from_parsed(parsed);
-        }
-        ch->cgi_response_ready(response.serialize());
-      }
-    }
+    handle_cgi_completion_(cgi_error);
     return kCgiInputDone;
   }
 
-  extend_deadline_on_activity_();
+  update_deadline_();
 
   if (cgi_output_.size() + static_cast<std::size_t>(n) > kMaxCgiOutputBytes) {
     return fail_with_bad_gateway_();
@@ -322,17 +348,7 @@ HandlerStatus CgiResponseHandler::handle_poll_error() {
 HandlerStatus CgiResponseHandler::fail_with_bad_gateway_() {
   finished_ = true;
 
-  if (cgi_pid_ > 0) {
-    kill(cgi_pid_, SIGKILL);
-    int status;
-    waitpid(cgi_pid_, &status, 0);
-    cgi_pid_ = -1;
-  }
-
-  if (out_fd_ != -1) {
-    close(out_fd_);
-    out_fd_ = -1;
-  }
+  cleanup_cgi_();
 
   ClientHandler* ch = server_.find_client_handler(client_fd_);
   if (ch != NULL) {

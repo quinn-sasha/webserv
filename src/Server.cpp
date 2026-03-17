@@ -43,6 +43,7 @@ Server::Server(const std::string& config_file) : num_clients_(0) {
       MonitoredFdHandler* handler =
           new AcceptHandler(listen_sock->fd(), *this, addr, port);
       monitored_fd_to_handler_[listen_sock->fd()] = handler;
+      timeout_manager_.add_timeout(listen_sock->fd(), handler);
     }
   }
 }
@@ -68,12 +69,21 @@ void Server::run() {
       throw std::runtime_error("Error: poll_fds_ must not be empty");
     }
 
-    int poll_ret = 0;
-    const bool has_events = poll_with_deadlines_(poll_ret);
-    if (!has_events) {
-      continue;
+    int timeout_ms = timeout_manager_.get_next_timeout_ms();
+
+    int poll_ret = poll(&poll_fds_[0], poll_fds_.size(), timeout_ms);
+    if (poll_ret == -1) {
+      throw SystemError("poll");
     }
 
+    bool timeout_ok = handle_timeouts_();
+    if (!timeout_ok) {
+      break;
+    }
+
+    if (poll_ret == 0) {
+      continue;
+    }
     for (std::size_t i = 0; i < poll_fds_.size(); ++i) {
       if (poll_fds_[i].revents == 0) {
         continue;
@@ -102,6 +112,8 @@ void Server::run() {
 
 HandlerStatus Server::handle_fd_event(int pollfd_index) {
   struct pollfd& poll_fd = poll_fds_[pollfd_index];
+
+  timeout_manager_.update_timeout(poll_fd.fd);
 
   std::map<int, MonitoredFdHandler*>::iterator hit =
       monitored_fd_to_handler_.find(poll_fd.fd);
@@ -150,6 +162,7 @@ HandlerStatus Server::handle_fd_event(int pollfd_index) {
 
 void Server::remove_fd(int pollfd_index) {
   int fd = poll_fds_[pollfd_index].fd;
+  timeout_manager_.remove_timeout(fd);
   delete monitored_fd_to_handler_[fd];
   monitored_fd_to_handler_.erase(fd);
   poll_fds_.erase(poll_fds_.begin() + pollfd_index);
@@ -177,6 +190,7 @@ int Server::register_new_client(int client_fd, const std::string& addr,
   MonitoredFdHandler* handler =
       new ClientHandler(client_fd, addr, port, client_addr, *this, config_);
   monitored_fd_to_handler_.insert(std::make_pair(client_fd, handler));
+  timeout_manager_.add_timeout(client_fd, handler);
   return 0;
 }
 
@@ -187,15 +201,26 @@ void Server::register_fd(int fd, MonitoredFdHandler* handler, short events) {
   p.revents = 0;
   poll_fds_.push_back(p);
   monitored_fd_to_handler_.insert(std::make_pair(fd, handler));
+  timeout_manager_.add_timeout(fd, handler);
 }
 
 void Server::set_fd_events(int fd, short events) {
-  for (std::size_t i = 0; i < poll_fds_.size(); ++i) {
-    if (poll_fds_[i].fd == fd) {
-      poll_fds_[i].events = events;
-      return;
-    }
+  int idx = find_pollfd_index_(fd);
+  if (idx != -1) {
+    poll_fds_[idx].events = events;
   }
+}
+
+void Server::update_timeout(int fd) {
+  timeout_manager_.update_timeout(fd);
+}
+
+int Server::find_pollfd_index_(int fd) const {
+  for (std::size_t i = 0; i < poll_fds_.size(); ++i) {
+    if (poll_fds_[i].fd == fd) 
+      return static_cast<int>(i);
+  }
+  return -1;
 }
 
 ClientHandler* Server::find_client_handler(int client_fd) {
@@ -205,4 +230,33 @@ ClientHandler* Server::find_client_handler(int client_fd) {
     return NULL;
   }
   return dynamic_cast<ClientHandler*>(it->second);
+}
+
+bool Server::handle_timeouts_() {
+  std::vector<int> timeout_fd = timeout_manager_.get_timedout_fds();
+
+  for (std::size_t i = 0; i < timeout_fd.size(); ++i) {
+    int fd = timeout_fd[i];
+    
+    std::map<int, MonitoredFdHandler*>::iterator it = monitored_fd_to_handler_.find(fd);
+    if (it == monitored_fd_to_handler_.end()) continue;
+
+    MonitoredFdHandler* handler = it->second;
+    HandlerStatus status = handler->handle_timeout();
+
+    if (status == kHandlerFatalError) {
+      std::cerr << "Fatal error occurred. Stopping server.\n";
+      return false;
+    }
+
+    int idx = find_pollfd_index_(fd);
+    if (idx != -1) {
+      if (find_client_handler(fd) != NULL) {
+        remove_client(idx);
+      } else {
+        remove_fd(idx);
+      }
+    }
+  }
+  return true;
 }

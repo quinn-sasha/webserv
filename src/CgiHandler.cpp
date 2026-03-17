@@ -10,7 +10,6 @@
 #include <cstring>
 #include <iostream>
 #include <sstream>
-#include <cerrno>
 #include <fstream>
 
 #include "Server.hpp"
@@ -38,7 +37,7 @@ CgiHandler::~CgiHandler() {
 }
 
 static void cgi_error_exit(const char* func_name, int code) {
-  std::cerr << "Error: " << func_name << " " << strerror(errno) << "\n";
+  std::cerr << "Error: " << func_name << "\n";
   std::exit(code);
 }
 
@@ -53,76 +52,6 @@ static int set_nonblocking(int fd) {
   return 0;
 }
 
-static bool is_executable_regular_file(const std::string& path) {
-  struct stat st;
-  if (stat(path.c_str(), &st) != 0) {
-    return false;
-  }  
-  if (!S_ISREG(st.st_mode)) {
-    return false;
-  }
-  if ((st.st_mode & (S_IXUSR | S_IXGRP | S_IXOTH)) == 0) {
-    return false;
-  }
-  return true;
-}
-
-// static std::vector<std::string> split_ws(const std::string& s) {
-//   std::istringstream iss(s);
-//   std::vector<std::string> toks;
-//   std::string t;
-//   while (iss >> t) {
-//     toks.push_back(t);
-//   }
-//   return toks;
-// }
-
-// static std::vector<std::string> shebang_tokens(const std::string& script_path) {
-//   std::ifstream ifs(script_path.c_str());
-//   if (!ifs.is_open()) return std::vector<std::string>();
-
-//   std::string line;
-//   std::getline(ifs, line);
-//   line = trim(line, "\t \r");
-
-//   if (line.size() >= 2 && line[0] == '#' && line[1] == '!') {
-//     std::string rest = line.substr(2);
-//     while (!rest.empty() && (rest[0] == ' ' || rest[0] == '\t')) {
-//       rest.erase(0, 1); 
-//     }
-//     return split_ws(rest);
-//   }
-//   return std::vector<std::string>();
-// }
-
-
-
-static CgiHandler::ExecArgv build_exec_argv(const std::string& script_name,
-                                            const std::string& cgi_path) {
-  CgiHandler::ExecArgv execargv;
-  if (!is_executable_regular_file(script_name)) 
-  return execargv;
-
-  // if (!cgi_path.empty()) {
-    execargv.file = cgi_path;
-    execargv.argv.push_back(execargv.file);
-    execargv.argv.push_back(script_name);
-    return execargv;
-  //}
-
-  // std::vector<std::string> shebang = shebang_tokens(script_name);
-  // if (!shebang.empty()) {
-  //   execargv.file = shebang[0];
-  //   execargv.argv = shebang;
-  //   execargv.argv.push_back(script_name);
-  //   return execargv;
-  // }
-
-  // execargv.file = "./" + script_name;
-  // execargv.argv.push_back(execargv.file);
-  //return execargv;
-}
-
 static std::string prepare_script_name(const std::string& script_path) {
   std::size_t slash = script_path.rfind('/');
   if (slash == std::string::npos) {
@@ -133,6 +62,32 @@ static std::string prepare_script_name(const std::string& script_path) {
     cgi_error_exit("chdir", -1);
   }
   return script_path.substr(slash + 1);
+}
+
+static bool is_executable_regular_file(const std::string& path) {
+  struct stat st;
+  if (stat(path.c_str(), &st) != 0) {
+    return false;
+  }  
+  if (!S_ISREG(st.st_mode)) {
+    return false;
+  }
+  if (access(path.c_str(), X_OK)) {
+    return false;
+  }
+  return true;
+}
+
+static CgiHandler::ExecArgv build_exec_argv(const std::string& script_name,
+                                            const std::string& cgi_path) {
+  CgiHandler::ExecArgv execargv;
+  if (!is_executable_regular_file(script_name)) 
+  return execargv;
+
+  execargv.file = cgi_path;
+  execargv.argv.push_back(execargv.file);
+  execargv.argv.push_back(script_name);
+  return execargv;
 }
 
 void CgiHandler::exec_cgi_child(int pipe_in[2], int pipe_out[2], const std::string& script_path, const std::string& cgi_path) {
@@ -147,7 +102,7 @@ void CgiHandler::exec_cgi_child(int pipe_in[2], int pipe_out[2], const std::stri
     cgi_error_exit("dup2(stdout)", -1);
   }
   close(pipe_out[1]);
-  
+
   std::string script_name = prepare_script_name(script_path);
 
   MetaVariables env = \
@@ -173,14 +128,14 @@ int CgiHandler::execute_cgi(const std::string& script_path, const std::string& c
   int pipe_out[2];
 
   if (pipe(pipe_in) == -1 || pipe(pipe_out) == -1) {
-    std::cerr << "Error: pipe " << strerror(errno) << "\n";
+    std::cerr << "Error: pipe " << "\n";
     return -1;
   }
 
   cgi_pid_ = fork();
 
   if (cgi_pid_ == -1) {
-    std::cerr << "Error: fork " << strerror(errno) << "\n";
+    std::cerr << "Error: fork "  << "\n";
     close(pipe_in[0]);  
     close(pipe_in[1]);
     close(pipe_out[0]); 
@@ -196,7 +151,7 @@ int CgiHandler::execute_cgi(const std::string& script_path, const std::string& c
   close(pipe_out[1]);
 
   if (set_nonblocking(pipe_in[1]) == -1 || set_nonblocking(pipe_out[0]) == -1) {
-    std::cerr << "Error: fcntl " << strerror(errno) << "\n";
+    std::cerr << "Error: fcntl "  << "\n";
     return -1;
   }
 

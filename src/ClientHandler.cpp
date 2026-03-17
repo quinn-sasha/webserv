@@ -4,10 +4,10 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <cerrno>
-#include <cstdlib>  // std::atoi
+#include <cstdlib>  
 #include <cstring>
 #include <iostream>
+#include <ctime>
 
 #include "CgiHandler.hpp"
 #include "CgiInputHandler.hpp"
@@ -30,7 +30,10 @@ ClientHandler::ClientHandler(int client_fd, const std::string& addr,
       server_(server),
       config_(config),
       bytes_sent_(0),
-      state_(kReceiving) {}
+      state_(kReceiving),
+      last_activity_sec_(static_cast<int64_t>(std::time(NULL))) {
+  deadline_sec_ = last_activity_sec_ + kClientTimeoutSec;
+}
 
 ClientHandler::~ClientHandler() {
   if (client_fd_ != -1 && close(client_fd_) == -1) {
@@ -47,6 +50,8 @@ HandlerStatus ClientHandler::handle_input() {
   if (num_read == -1 || num_read == 0) {
     return kHandlerClosed;
   }
+
+  update_deadline_();
 
   ParserStatus status = parser_.parse_request(buffer_, num_read);
   if (status == kParseContinue) {
@@ -68,10 +73,7 @@ HandlerStatus ClientHandler::handle_input() {
     return kHandlerContinue;
   }
 
-  state_ = kSendingResponse;
-  response_ = result.response;
-  response_str_ = response_.serialize();
-  bytes_sent_ = 0;
+  start_sending_response_(result.response.serialize());
   return kHandlerReceived;
 }
 
@@ -91,6 +93,7 @@ HandlerStatus ClientHandler::handle_output() {
     return kHandlerClosed;
   }
 
+  update_deadline_();
   bytes_sent_ += num_sent;
 
   if (bytes_sent_ < response_str_.size()) {
@@ -122,7 +125,9 @@ bool ClientHandler::do_cgi_(const Request& request,
   server_.register_fd(cgi.get_pipe_in_fd(),
                       new CgiInputHandler(cgi.get_pipe_in_fd(),
                                           cgi.get_cgi_pid(),
-                                          request.body),
+                                          request.body,
+                                          server_,
+                                          client_fd_),
                       POLLOUT);
 
   server_.register_fd(cgi.get_pipe_out_fd(),
@@ -149,14 +154,8 @@ void ClientHandler::setup_cgi_(std::string& server_name,
   remote_addr = client_addr_;
 }
 
-
-
 void ClientHandler::cgi_response_ready(const std::string& response) {
-  response_str_ = response;
-  bytes_sent_ = 0;
-  state_ = kSendingResponse;
-
-  server_.set_fd_events(client_fd_, POLLOUT);
+  start_sending_response_(response);
 }
 
 void ClientHandler::cgi_local_redirect_ready(const std::string& location) {
@@ -190,10 +189,7 @@ void ClientHandler::cgi_local_redirect_ready(const std::string& location) {
 }
 
 void ClientHandler::send_prepared_response_() {
-  response_str_ = response_.serialize();
-  bytes_sent_ = 0;
-  state_ = kSendingResponse;
-  server_.set_fd_events(client_fd_, POLLOUT);
+  start_sending_response_(response_.serialize());
 }
 
 void ClientHandler::send_error_response_(ParserStatus status) {
@@ -217,4 +213,23 @@ const ServerContext& ClientHandler::set_up_target_config_() const {
     host_name = it->second;
   }
   return config_.get_config(std::atoi(port_.c_str()), host_name);
+}
+
+void ClientHandler::update_deadline_() {
+  last_activity_sec_ = static_cast<int64_t>(std::time(NULL));
+  deadline_sec_ = last_activity_sec_ + kClientTimeoutSec;
+  server_.update_timeout(client_fd_);
+}
+
+HandlerStatus ClientHandler::handle_timeout() {
+  std::cout << "Client connection timeout: " << client_addr_ << "\n";
+  return kHandlerClosed;
+}
+
+void ClientHandler::start_sending_response_(const std::string& full_response) {
+  response_str_ = full_response;
+  bytes_sent_ = 0;
+  state_ = kSendingResponse;
+  server_.set_fd_events(client_fd_, POLLOUT);
+  update_deadline_();
 }

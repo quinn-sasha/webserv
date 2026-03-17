@@ -23,7 +23,7 @@ class MonitoredFdHandler {
 
   // timeout API (monotonic ms)
   virtual bool has_deadline() const { return false; }
-  virtual int64_t deadline_ms() const { return 0; }
+  virtual int64_t deadline_sec() const { return 0; }
   virtual HandlerStatus handle_timeout() { return kHandlerClosed; }
 };
 
