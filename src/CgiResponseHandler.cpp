@@ -67,7 +67,7 @@ static bool is_valid_header_name(const std::string& key) {
 
 static Response build_response_from_parsed(
     const CgiResponseHandler::ParsedCgiOutput& parsed) {
-  Response response;      
+  Response response;
   if (!parsed.is_valid) {
     response.prepare_error_response(kBadGateway, "");
     return response;
@@ -343,5 +343,3 @@ HandlerStatus CgiResponseHandler::fail_with_bad_gateway_() {
 
   return kCgiInputDone;
 }
-
-

@@ -35,6 +35,7 @@ ProcessorResult RequestProcessor::handle_error(ParserStatus status,
     }
     error_page_full_path = root + error_uri;
   }
+  
   result.response.prepare_error_response(status, error_page_full_path);
   result.next_action = ProcessorResult::kSendResponse;
 
@@ -68,7 +69,7 @@ bool RequestProcessor::is_method_allowed(HttpMethod method, const LocationContex
   return false;
 }
 
-static bool is_cgi_handler(const LocationContext& lc,std::string& path_only, 
+static bool is_cgi_handler(const LocationContext& lc,std::string& path_only,
                             std::string& cgi_path,std::string& script_uri) {
 
   if (lc.cgi_handlers.empty()) {
@@ -395,11 +396,9 @@ std::string RequestProcessor::get_error_page_path(
   if (error_lc.path != "__NOT_FOUND__" && !error_lc.root.empty()) {
     root = error_lc.root;
   } else {
-    root = target_config.server_root; //server_rootにも入ってないかも
+    root = target_config.server_root;
   }
 
-  // 3. パスの結合
-  // URI の先頭にスラッシュがない場合のみ補完
   if (!error_uri.empty() && error_uri[0] != '/') {
     root += "/";
   }

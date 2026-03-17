@@ -14,6 +14,7 @@ class Response {
   std::string body_;
 
  public:
+  void generate_default_error_html();
   void prepare_error_response(ParserStatus status, const std::string& path);
   void prepare_success_response(ParserStatus status);
   void prepare_redirect_response(int status, const std::string& redirect_url);

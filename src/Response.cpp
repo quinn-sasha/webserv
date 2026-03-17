@@ -25,10 +25,7 @@ std::string Response::get_reason_phrase(int code) {
   switch (code) {
     case 200: return "OK";
     case 201: return "Created";
-<<<<<<< HEAD
     case 204: return "NoContent";
-=======
->>>>>>> 83d0d4ae70b06cc94608c5f66ed5e1a88904a338
     case 301: return "Moved Permanently";
     case 302: return "Found";
     case 400: return "Bad Request";
@@ -65,25 +62,32 @@ void Response::ensure_content_length() {
   add_header("Content-Length", ss.str());
 }
 
+void Response::generate_default_error_html() {
+  std::string message = status_code_ + " " + reason_phrase_;
+
+  std::string html = http_error_constants::kErrorHtmlStart;
+  html.append(message);
+  html.append(http_error_constants::kErrorTitleEnd);
+  html.append(message);
+  html.append(http_error_constants::kErrorHeaderEnd);
+
+  set_body_and_content_length(html);
+}
+
 void Response::prepare_error_response(ParserStatus status, const std::string& path) {
   int code = static_cast<int>(status);
   set_status_code(code);
 
   if (!path.empty() && access(path.c_str(), R_OK) == 0) {
-    fill_from_file(path);
-  } else {
-    std::string message = status_code_ + " " + reason_phrase_;
-
-    std::string html = http_error_constants::kErrorHtmlStart;
-    html.append(message);
-    html.append(http_error_constants::kErrorTitleEnd);
-    html.append(message);
-    html.append(http_error_constants::kErrorHeaderEnd);
-
-    set_body_and_content_length(html);
+    if (fill_from_file(path)) {
+      add_header("Content-Type", "text/html");
+      return;
+    }
   }
+  generate_default_error_html();
   add_header("Content-Type", "text/html");
 }
+
 
 void Response::prepare_success_response(ParserStatus status) {
   int code = static_cast<int>(status);
@@ -201,5 +205,3 @@ std::string Response::get_mime_type(const std::string& path) {
 
   return "application/octet-stream";
 }
-
-
