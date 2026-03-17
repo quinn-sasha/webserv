@@ -14,7 +14,7 @@ int main(int argc, char* argv[]) {
 
   if (argc == 2) {
     config_path = argv[1];
-  } else if (argc = 1) {
+  } else if (argc == 1) {
     config_path = "test/default.conf";
   } else {
     error_exit("Usage: ./webserv configuration_file");
