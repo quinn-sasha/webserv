@@ -222,7 +222,9 @@ void ClientHandler::update_deadline_() {
 }
 
 HandlerStatus ClientHandler::handle_timeout() {
-  std::cout << "Client connection timeout: " << client_addr_ << "\n";
+  if (state_ == kSendingResponse) {
+    std::cout << "Response sending timeout: " << client_addr_ << "\n";
+  }
   return kHandlerClosed;
 }
 

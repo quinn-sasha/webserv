@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>CGI GET vs POST Test</title>
+    <style>
+        body { font-family: sans-serif; margin: 40px; line-height: 1.6; }
+        .container { display: flex; gap: 40px; }
+        .box { flex: 1; padding: 20px; border: 1px solid #ccc; border-radius: 8px; }
+        h2 { margin-top: 0; }
+        .get-box { background-color: #f0f8ff; }
+        .post-box { background-color: #fff0f5; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="text"] { width: 100%; padding: 8px; margin-bottom: 15px; box-sizing: border-box; }
+        input[type="submit"] { padding: 10px 20px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>CGI Method Test</h1>
+    <p>同じデータを GET と POST で送り比べてみてください。</p>
+
+    <div class="container">
+        <!-- GET Form -->
+        <div class="box get-box">
+            <h2>GET Method</h2>
+            <p><small>データはURLの末尾（?name=...）に付与されます。</small></p>
+            <form action="/cgi-bin/test.py" method="GET">
+                <label for="get_name">名前:</label>
+                <input type="text" id="get_name" name="name" placeholder="Taro">
+                
+                <label for="get_msg">メッセージ:</label>
+                <input type="text" id="get_msg" name="message" placeholder="Hello GET">
+                
+                <input type="submit" value="GETで送信">
+            </form>
+        </div>
+
+        <!-- POST Form -->
+        <div class="box post-box">
+            <h2>POST Method</h2>
+            <p><small>データはリクエストボディとして標準入力から送られます。</small></p>
+            <form action="/cgi-bin/test.py" method="POST">
+                <label for="post_name">名前:</label>
+                <input type="text" id="post_name" name="name" placeholder="Jiro">
+                
+                <label for="post_msg">メッセージ:</label>
+                <input type="text" id="post_msg" name="message" placeholder="Hello POST">
+                
+                <input type="submit" value="POSTで送信">
+            </form>
+        </div>
+    </div>
+
+    <hr>
+    <p><a href="/">トップへ戻る</a></p>
+</body>
+</html>
