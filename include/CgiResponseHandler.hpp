@@ -3,6 +3,7 @@
 
 #include "ClientHandler.hpp"
 #include "MonitoredFdHandler.hpp"
+#include "Config.hpp"
 #include <map>
 #include <string>
 #include <sys/types.h>
@@ -30,8 +31,7 @@ class CgiResponseHandler : public MonitoredFdHandler {
           body() {}
   };
 
-  CgiResponseHandler(int out_fd, pid_t cgi_pid, ClientHandler* owner);
-  CgiResponseHandler(int out_fd, pid_t cgi_pid, Server& server, int client_fd);
+  CgiResponseHandler(int out_fd, pid_t cgi_pid, Server& server, int client_fd, const ServerContext& target_config);
   ~CgiResponseHandler();
 
   HandlerStatus handle_input();
@@ -61,6 +61,7 @@ class CgiResponseHandler : public MonitoredFdHandler {
   ClientHandler* owner_;
   Server& server_;
   int client_fd_;
+  const ServerContext& target_config_;
   std::string cgi_output_;
 
   bool finished_;

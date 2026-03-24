@@ -41,10 +41,12 @@ class ClientHandler : public MonitoredFdHandler {
   static const int64_t kClientTimeoutSec = 30; // 30s
   void refresh_current_request_();
   const ServerContext& set_up_target_config_() const;
-  bool do_cgi_(const Request& request, const std::string& script_path,
-              const std::string& cgi_path,
-              const std::string& query_string,
-              const std::string& script_uri);
+  bool do_cgi_(const Request& request,
+               const std::string& script_path,
+               const std::string& cgi_path,
+               const std::string& query_string,
+               const std::string& script_uri,
+               const ServerContext& target_config);
   void send_prepared_response_();
   void send_error_response_(ParserStatus status);
   void update_deadline_();

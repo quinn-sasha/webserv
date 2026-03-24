@@ -14,9 +14,10 @@
 
 #include "Server.hpp"
 #include "ClientHandler.hpp"
+#include "RequestProcessor.hpp"
 #include "string_utils.hpp"
 
-namespace cgi {
+namespace {
 static int64_t now_time_cgi_out() {
   return static_cast<int64_t>(std::time(NULL));
 }
@@ -63,10 +64,13 @@ static bool is_valid_header_name(const std::string& key) {
 }
 
 static Response build_response_from_parsed(
-    const CgiResponseHandler::ParsedCgiOutput& parsed) {
+    const CgiResponseHandler::ParsedCgiOutput& parsed,
+    const ServerContext& target_config) {
   Response response;
   if (!parsed.is_valid) {
-    response.prepare_error_response(kBadGateway, "");
+    response.prepare_error_response(
+        kBadGateway,
+        RequestProcessor::get_error_page_path(target_config, kBadGateway));
     return response;
   }
 
@@ -98,7 +102,7 @@ static bool parse_header_line(const std::string& line, bool& seen_status,
   }
 
   std::string key = line.substr(0, colon_pos);
-  if (!cgi::is_valid_header_name(key)) {
+  if (!is_valid_header_name(key)) {
     return false;
   }
 
@@ -151,7 +155,7 @@ bool CgiResponseHandler::has_deadline() const { return true; }
 int64_t CgiResponseHandler::deadline_sec() const { return deadline_sec_; }
 
 void CgiResponseHandler::update_deadline_() {
-  last_activity_sec_ = cgi::now_time_cgi_out();
+  last_activity_sec_ = now_time_cgi_out();
   deadline_sec_ = last_activity_sec_ + kCgiTimeoutSec;
   server_.update_timeout(out_fd_);
   // Keep the parent connection alive while CGI stdout is still flowing.
@@ -160,14 +164,15 @@ void CgiResponseHandler::update_deadline_() {
   }
 }
 
-CgiResponseHandler::CgiResponseHandler(int out_fd, pid_t cgi_pid, Server& server, int client_fd)
+CgiResponseHandler::CgiResponseHandler(int out_fd, pid_t cgi_pid, Server& server, int client_fd, const ServerContext& target_config)
     : out_fd_(out_fd),
       cgi_pid_(cgi_pid),
       server_(server),
       client_fd_(client_fd),
+      target_config_(target_config),
       cgi_output_(),
       finished_(false),
-      start_sec_(cgi::now_time_cgi_out()),
+      start_sec_(now_time_cgi_out()),
       last_activity_sec_(start_sec_) {
   deadline_sec_ = start_sec_ + kCgiTimeoutSec;
 }
@@ -218,12 +223,14 @@ void CgiResponseHandler::handle_cgi_completion_(bool cgi_error) {
     return;
   }
 
-  Response response;
-  if (cgi_error || !parsed.is_valid) {
-    response.prepare_error_response(kBadGateway, "");
-  } else {
-    response = cgi::build_response_from_parsed(parsed);
-  }
+    Response response;
+    if (cgi_error || !parsed.is_valid) {
+      response.prepare_error_response(
+          kBadGateway,
+          RequestProcessor::get_error_page_path(target_config_, kBadGateway));
+    } else {
+      response = build_response_from_parsed(parsed, target_config_);
+    }
   ch->cgi_response_ready(response.serialize());
 }
 
@@ -257,12 +264,12 @@ CgiResponseHandler::parse_cgi_output_(const std::string& cgi_output) {
     if (line.empty()) {
       continue;
     }
-    if (!cgi::parse_header_line(line, seen_status, status_line, result.headers)) {
+    if (!parse_header_line(line, seen_status, status_line, result.headers)) {
       return ParsedCgiOutput();
     }
   }
 
-  if (!cgi::apply_content_type_location_rules(result, status_line)) {
+  if (!apply_content_type_location_rules(result, status_line)) {
     return ParsedCgiOutput();  
   }
   if (result.is_local_redirect) {
@@ -275,7 +282,7 @@ CgiResponseHandler::parse_cgi_output_(const std::string& cgi_output) {
   if (status_line.empty()) {
     result.status_code = has_location ? 302 : 200;
   } else {
-    if (!cgi::parse_status_code(status_line, result.status_code)) {
+    if (!parse_status_code(status_line, result.status_code)) {
       return ParsedCgiOutput();
     }
   }
@@ -293,7 +300,9 @@ HandlerStatus CgiResponseHandler::handle_timeout() {
   ClientHandler* ch = server_.find_client_handler(client_fd_);
   if (ch != NULL) {
     Response response;
-    response.prepare_error_response(kGatewayTimeout, "");
+    response.prepare_error_response(
+        kGatewayTimeout,
+        RequestProcessor::get_error_page_path(target_config_, kGatewayTimeout));
     ch->cgi_response_ready(response.serialize());
   }
 
@@ -328,7 +337,7 @@ HandlerStatus CgiResponseHandler::handle_input() {
 
   cgi_output_.append(buf, n);
 
-  if (!cgi::has_header_terminator(cgi_output_) &&
+  if (!has_header_terminator(cgi_output_) &&
       cgi_output_.size() > kMaxCgiHeaderBytes) {
     return fail_with_bad_gateway_();
   }
@@ -353,7 +362,9 @@ HandlerStatus CgiResponseHandler::fail_with_bad_gateway_() {
   ClientHandler* ch = server_.find_client_handler(client_fd_);
   if (ch != NULL) {
     Response response;
-    response.prepare_error_response(kBadGateway, "");
+    response.prepare_error_response(
+        kBadGateway,
+        RequestProcessor::get_error_page_path(target_config_, kBadGateway));
     ch->cgi_response_ready(response.serialize());
   }
 

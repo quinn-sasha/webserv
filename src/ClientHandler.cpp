@@ -67,7 +67,8 @@ HandlerStatus ClientHandler::handle_input() {
 
   if (result.next_action == ProcessorResult::kExecuteCgi) {
     if (!do_cgi_(current_request_, result.script_path,
-                result.cgi_path, result.query_string, result.script_uri)) {
+                result.cgi_path, result.query_string, result.script_uri,
+                target_config)) {
       return kHandlerReceived;
     }
     return kHandlerContinue;
@@ -107,7 +108,8 @@ bool ClientHandler::do_cgi_(const Request& request,
                            const std::string& script_path,
                            const std::string& cgi_path,
                            const std::string& query_string,
-                           const std::string& script_uri) {
+                           const std::string& script_uri,
+                           const ServerContext& target_config) {
   state_ = kExecutingCgi;
 
   std::string server_name;
@@ -134,7 +136,8 @@ bool ClientHandler::do_cgi_(const Request& request,
                       new CgiResponseHandler(cgi.get_pipe_out_fd(),
                                              cgi.get_cgi_pid(),
                                              server_,
-                                             client_fd_),
+                                             client_fd_,
+                                             target_config),
                       POLLIN);
   return true;
 }
@@ -178,7 +181,8 @@ void ClientHandler::cgi_local_redirect_ready(const std::string& location) {
       RequestProcessor::process(kParseFinished, current_request_, target_config);
   if (result.next_action == ProcessorResult::kExecuteCgi) {
     if (!do_cgi_(current_request_, result.script_path,
-                result.cgi_path, result.query_string, result.script_uri)) {
+                result.cgi_path, result.query_string, result.script_uri,
+                target_config)) {
       return;
     }
     return;

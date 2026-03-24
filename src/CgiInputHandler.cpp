@@ -85,7 +85,7 @@ HandlerStatus CgiInputHandler::handle_output() {
 }
 
 HandlerStatus CgiInputHandler::handle_poll_error() {
-  std::cerr << "Note: poll error on CGI pipe_in (CGI likely closed stdin)\n";
+  std::cerr << "Error : CgiInputHandler's poll\n";
   close_in_fd_();
   return kCgiInputDone;
 }
