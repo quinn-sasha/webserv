@@ -250,6 +250,10 @@ ProcessorResult RequestProcessor::handle_upload(const Request& request, const st
   ProcessorResult result;
   std::string save_path;
 
+  if (path_only.empty() || path_only[path_only.size() - 1] == '/') {
+    return handle_error(kForbidden, target_config);
+  }
+
   if (!lc.upload_store.empty()) {
     size_t last_slash = path_only.find_last_of('/');
     std::string filename;
