@@ -4,7 +4,6 @@
 #include <string>
 #include <cstdlib>
 #include <climits>
-#include <cerrno>
 #include "Parser.hpp"
 
 std::string to_lower(std::string s) {
