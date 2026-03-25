@@ -102,30 +102,27 @@ ProcessorResult RequestProcessor::handle_cgi(const std::string& path_only,
                                              const LocationContext& lc,
                                              const ServerContext& target_config) {
   ProcessorResult result;
-  result.next_action = ProcessorResult::kExecuteCgi;
-  result.script_uri = path_only;
-  result.query_string = query_string;
-  result.cgi_path = cgi_path;
-
-  std::string root;
-  if (!lc.root.empty()) {
-    root = lc.root;
-  } else if (!target_config.server_root.empty()) {
-    root = target_config.server_root;
-  } else {
-    root = "./html";
-  }
 
   std::string script_uri = path_only;
   if (!script_uri.empty() && script_uri[0] == '/') {
     script_uri = script_uri.substr(1);
   }
 
-  result.script_path = root + "/" + script_uri;
+  std::string full_script_path = lc.root + "/" + script_uri;
 
-  if (result.cgi_path.empty()) {
-    return handle_error(kInternalServerError, target_config);
+  struct stat s;
+  if (stat(full_script_path.c_str(), &s) == -1) {
+    return handle_error(errno_to_status(errno), target_config);
   }
+  if (S_ISDIR(s.st_mode)) {
+    return handle_error(kForbidden, target_config);
+  }
+
+  result.next_action = ProcessorResult::kExecuteCgi;
+  result.script_uri = path_only;
+  result.query_string = query_string;
+  result.cgi_path = cgi_path;
+  result.script_path = full_script_path;
 
   return result;
 }
