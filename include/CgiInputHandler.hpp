@@ -7,29 +7,34 @@
 
 #include "MonitoredFdHandler.hpp"
 
+class Server;
+
 class CgiInputHandler : public MonitoredFdHandler {
  public:
-  CgiInputHandler(int pipe_in_fd, pid_t cgi_pid, const std::string& body);
+  CgiInputHandler(int pipe_in_fd, pid_t cgi_pid, const std::string& body,
+                  Server& server, int client_fd);
   ~CgiInputHandler();
 
   HandlerStatus handle_input();
   HandlerStatus handle_output();
   HandlerStatus handle_poll_error();
 
-  // timeout support
   virtual bool has_deadline() const;
-  virtual int64_t deadline_ms() const;
+  virtual int64_t deadline_sec() const;
   virtual HandlerStatus handle_timeout();
 
  private:
-  static const int64_t kCgiInputTimeoutMs = 10000;  // 10s
+  static const int64_t kCgiInputTimeoutSec = 10;  // 10s
 
-  void extend_deadline_on_activity_();
+  void update_deadline_();
+  void close_in_fd_();
 
   int         pipe_in_fd_;
   pid_t       cgi_pid_;
   std::string body_;
   std::size_t bytes_written_;
+  int         client_fd_;
+  Server&     server_;
 
   // deadline state
   int64_t start_sec_;

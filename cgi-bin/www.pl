@@ -110,3 +110,5 @@ print <<EOF;
 </body>
 </html>
 EOF
+
+#curl -X POST -d "name=foo&age=20" http://localhost:8080/cgi-bin/www.pl

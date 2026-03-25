@@ -4,10 +4,10 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include <cerrno>
-#include <cstdlib>  // std::atoi
+#include <cstdlib>  
 #include <cstring>
 #include <iostream>
+#include <ctime>
 
 #include "CgiHandler.hpp"
 #include "CgiInputHandler.hpp"
@@ -30,7 +30,10 @@ ClientHandler::ClientHandler(int client_fd, const std::string& addr,
       server_(server),
       config_(config),
       bytes_sent_(0),
-      state_(kReceiving) {}
+      state_(kReceiving),
+      last_activity_sec_(static_cast<int64_t>(std::time(NULL))) {
+  deadline_sec_ = last_activity_sec_ + kClientTimeoutSec;
+}
 
 ClientHandler::~ClientHandler() {
   if (client_fd_ != -1 && close(client_fd_) == -1) {
@@ -44,43 +47,34 @@ HandlerStatus ClientHandler::handle_input() {
   }
 
   ssize_t num_read = recv(client_fd_, buffer_, buf_size, 0);
-  if (num_read == -1) {
+  if (num_read == -1 || num_read == 0) {
     return kHandlerClosed;
   }
-  if (num_read == 0) {  // Connection closed
-    return kHandlerClosed;
-  }
+
+  update_deadline_();
 
   ParserStatus status = parser_.parse_request(buffer_, num_read);
   if (status == kParseContinue) {
     return kHandlerContinue;
   }
 
-  const Request& req = parser_.get_request();
-  std::string host_name = "";
-
-  // map::find を使って、const 安全に値を探す
-  std::map<std::string, std::string>::const_iterator it = req.headers.find("host");
-  if (it != req.headers.end()) {
-    host_name = it->second;
-  }
-  const ServerContext& target_config = config_.get_config(std::atoi(port_.c_str()), host_name);
-  ProcessorResult result = RequestProcessor::process(status, req, target_config);
+  refresh_current_request_();
+  const ServerContext& target_config = set_up_target_config_();
+  ProcessorResult result =
+      RequestProcessor::process(status, current_request_, target_config);
 
   internal_redirect_count_ = 0;
 
   if (result.next_action == ProcessorResult::kExecuteCgi) {
-    if (!do_cgi(current_request_, result.script_path)) {
+    if (!do_cgi_(current_request_, result.script_path,
+                result.cgi_path, result.query_string, result.script_uri,
+                target_config)) {
       return kHandlerReceived;
     }
     return kHandlerContinue;
   }
 
-  // Normal response
-  state_ = kSendingResponse;
-  response_ = result.response;  // Maybe this copy is too heavy
-  response_str_ = response_.serialize();
-  bytes_sent_ = 0;
+  start_sending_response_(result.response.serialize());
   return kHandlerReceived;
 }
 
@@ -100,6 +94,7 @@ HandlerStatus ClientHandler::handle_output() {
     return kHandlerClosed;
   }
 
+  update_deadline_();
   bytes_sent_ += num_sent;
 
   if (bytes_sent_ < response_str_.size()) {
@@ -109,27 +104,21 @@ HandlerStatus ClientHandler::handle_output() {
   return kHandlerSent;
 }
 
-bool ClientHandler::do_cgi(const Request& request,
-                                           const std::string& script_path) {
+bool ClientHandler::do_cgi_(const Request& request,
+                           const std::string& script_path,
+                           const std::string& cgi_path,
+                           const std::string& query_string,
+                           const std::string& script_uri,
+                           const ServerContext& target_config) {
   state_ = kExecutingCgi;
 
   std::string server_name;
   std::string remote_addr;
   setup_cgi_(server_name, remote_addr);
 
-  CgiHandler cgi(request, server_name, port_, remote_addr);
-  if (cgi.execute_cgi(script_path) == -1) {
-    const Request& req = parser_.get_request();
-    std::string host_name = "";
-    std::map<std::string, std::string>::const_iterator it = req.headers.find("host");
-    if (it != req.headers.end()) {
-    host_name = it->second;
-    }
-    const ServerContext& target_config = config_.get_config(std::atoi(port_.c_str()), host_name);
-    response_.prepare_error_response(kInternalServerError, RequestProcessor::get_error_page_path(target_config, kInternalServerError));
-    response_str_ = response_.serialize();
-    state_ = kSendingResponse;
-    server_.set_fd_events(client_fd_, POLLOUT);
+  CgiHandler cgi(request, query_string, script_uri, server_name, port_, remote_addr);
+  if (cgi.execute_cgi(script_path, cgi_path) == -1) {
+    send_error_response_(kInternalServerError);
     return false;
   }
 
@@ -138,14 +127,17 @@ bool ClientHandler::do_cgi(const Request& request,
   server_.register_fd(cgi.get_pipe_in_fd(),
                       new CgiInputHandler(cgi.get_pipe_in_fd(),
                                           cgi.get_cgi_pid(),
-                                          request.body),
+                                          request.body,
+                                          server_,
+                                          client_fd_),
                       POLLOUT);
 
   server_.register_fd(cgi.get_pipe_out_fd(),
                       new CgiResponseHandler(cgi.get_pipe_out_fd(),
                                              cgi.get_cgi_pid(),
                                              server_,
-                                             client_fd_),
+                                             client_fd_,
+                                             target_config),
                       POLLIN);
   return true;
 }
@@ -166,52 +158,84 @@ void ClientHandler::setup_cgi_(std::string& server_name,
 }
 
 void ClientHandler::cgi_response_ready(const std::string& response) {
-  response_str_ = response;
-  bytes_sent_ = 0;
-  state_ = kSendingResponse;
-
-  server_.set_fd_events(client_fd_, POLLOUT);
+  start_sending_response_(response);
 }
 
 void ClientHandler::cgi_local_redirect_ready(const std::string& location) {
   if (location.empty() || location[0] != '/') {
-    cgi_response_ready("HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n");
+    send_error_response_(kBadGateway);
     return;
   }
 
   ++internal_redirect_count_;
-      const Request& req = parser_.get_request();
-      std::string host_name = "";
-      std::map<std::string, std::string>::const_iterator it = req.headers.find("host");
-      if (it != req.headers.end()) {
-      host_name = it->second;
-      }
-      const ServerContext& target_config = config_.get_config(std::atoi(port_.c_str()), host_name);
+  refresh_current_request_();
+  const ServerContext& target_config = set_up_target_config_();
   if (internal_redirect_count_ > kMaxInternalRedirects) {
-
-    response_.prepare_error_response(kInternalServerError, RequestProcessor::get_error_page_path(target_config, kInternalServerError));
-    response_str_ = response_.serialize();
-    bytes_sent_ = 0;
-    state_ = kSendingResponse;
-    server_.set_fd_events(client_fd_, POLLOUT);
+    send_error_response_(kInternalServerError);
     return;
   }
 
-  Request redirected = current_request_;
-  redirected.target = location;
-  current_request_ = redirected;
+  current_request_.target = location;
 
-  ProcessorResult result = RequestProcessor::process(kParseFinished, current_request_, target_config);
+  ProcessorResult result =
+      RequestProcessor::process(kParseFinished, current_request_, target_config);
   if (result.next_action == ProcessorResult::kExecuteCgi) {
-    if (!do_cgi(current_request_, result.script_path)) {
+    if (!do_cgi_(current_request_, result.script_path,
+                result.cgi_path, result.query_string, result.script_uri,
+                target_config)) {
       return;
     }
     return;
   }
 
   response_ = result.response;
-  response_str_ = response_.serialize();
+  send_prepared_response_();
+}
+
+void ClientHandler::send_prepared_response_() {
+  start_sending_response_(response_.serialize());
+}
+
+void ClientHandler::send_error_response_(ParserStatus status) {
+  refresh_current_request_();
+  const ServerContext& target_config = set_up_target_config_();
+  response_.prepare_error_response(
+      status,
+      RequestProcessor::get_error_page_path(target_config, status));
+  send_prepared_response_();
+}
+
+void ClientHandler::refresh_current_request_() {
+  current_request_ = parser_.get_request();
+}
+
+const ServerContext& ClientHandler::set_up_target_config_() const {
+  std::string host_name = "";
+  std::map<std::string, std::string>::const_iterator it =
+      current_request_.headers.find("host");
+  if (it != current_request_.headers.end()) {
+    host_name = it->second;
+  }
+  return config_.get_config(std::atoi(port_.c_str()), host_name);
+}
+
+void ClientHandler::update_deadline_() {
+  last_activity_sec_ = static_cast<int64_t>(std::time(NULL));
+  deadline_sec_ = last_activity_sec_ + kClientTimeoutSec;
+  server_.update_timeout(client_fd_);
+}
+
+HandlerStatus ClientHandler::handle_timeout() {
+  if (state_ == kSendingResponse) {
+    std::cout << "Response sending timeout: " << client_addr_ << "\n";
+  }
+  return kHandlerClosed;
+}
+
+void ClientHandler::start_sending_response_(const std::string& full_response) {
+  response_str_ = full_response;
   bytes_sent_ = 0;
   state_ = kSendingResponse;
   server_.set_fd_events(client_fd_, POLLOUT);
+  update_deadline_();
 }

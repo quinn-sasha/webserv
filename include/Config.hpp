@@ -18,6 +18,11 @@ struct ConfigLimits {
   static const long kPermanentRedirect = 308;
 };
 
+struct CgiConfig {
+  std::string extension;
+  std::string binary_path;
+};
+
 struct LocationContext {
   std::string path;
   std::string root;
@@ -29,8 +34,7 @@ struct LocationContext {
   int redirect_status_code;
   std::string redirect_url;
   std::string upload_store;
-  std::string cgi_extension;
-  std::string cgi_path;
+  std::vector<CgiConfig> cgi_handlers;
 
   LocationContext()
       : path("/"),

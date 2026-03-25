@@ -149,7 +149,7 @@ const ServerContext& Config::get_config(int port,
     }
   }
   if (candidates.empty()) {
-    throw std::runtime_error("get_config(): no matching port");
+    throw std::runtime_error("get_config(): no matching port"); //TODO throwやめよう
   }
   for (size_t i = 0; i < candidates.size(); ++i) {
     for (size_t j = 0; j < candidates[i]->server_names.size(); ++j) {

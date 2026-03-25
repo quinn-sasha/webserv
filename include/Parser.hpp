@@ -21,6 +21,8 @@ enum ParserStatus {
   kRequestHeaderFieldsTooLarge = 431,
   kInternalServerError = 500,
   kNotImplemented = 501,
+  kBadGateway = 502,
+  kGatewayTimeout = 504,
   kVersionNotSupported = 505,
   // Custom status used in Parser class
   kParseContinue,
