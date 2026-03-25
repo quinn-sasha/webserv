@@ -35,7 +35,7 @@ ProcessorResult RequestProcessor::handle_error(ParserStatus status,
     }
     error_page_full_path = root + error_uri;
   }
-  
+
   result.response.prepare_error_response(status, error_page_full_path);
   result.next_action = ProcessorResult::kSendResponse;
 
@@ -303,6 +303,13 @@ ProcessorResult RequestProcessor::handle_static_file(const Request& request, con
 
   if (stat(physical_path.c_str(), &s) == -1) {
     return handle_error(errno_to_status(errno), target_config);
+  }
+
+  if (S_ISDIR(s.st_mode) && !request.target.empty() && request.target[request.target.size() - 1] != '/') {
+      ProcessorResult result;
+      result.response.prepare_redirect_response(301, request.target + "/");
+      result.next_action = ProcessorResult::kSendResponse;
+      return result;
   }
 
   if (request.method == kGet) {
