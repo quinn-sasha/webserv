@@ -1,6 +1,5 @@
 <?php
-echo "Content-Type: text/plain\r\n";
-echo "\r\n";
+header("Content-Type: text/plain");
 
 echo "This is PHP CGI Script \n";
 echo "~~~~~~~~~~~~~~~~~~~~~~\n\n";
