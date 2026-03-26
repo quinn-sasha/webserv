@@ -27,6 +27,8 @@ ps -o rss,vsz,command -p $SERVER_PID | sed 's/^/  /'
 
 echo -e "\n${YELLOW}[Step 2] Launching Siege for $DURATION ($CONCURRENCY users)...${NC}"
 #
+sleep 5
+
 siege -c $CONCURRENCY -b -t$DURATION $TARGET_URL
 
 echo -e "\n${YELLOW}[Step 3] Post-Stress Memory Usage${NC}"

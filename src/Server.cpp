@@ -76,6 +76,7 @@ void Server::run() {
       if (errno != EINTR) {
         throw SystemError("poll");
       }
+      continue;
     }
 
     bool timeout_ok = handle_timeouts_();

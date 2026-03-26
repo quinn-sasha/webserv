@@ -70,11 +70,12 @@ HandlerStatus CgiInputHandler::handle_output() {
   if (n == -1) {
     handle_poll_error();
   }
+  if (n == 0) {
+    return kHandlerContinue;
+  }
 
-  if (n > 0) {
     bytes_written_ += static_cast<std::size_t>(n);
     update_deadline_();
-  }
 
   if (bytes_written_ >= body_.size()) {
     close_in_fd_();

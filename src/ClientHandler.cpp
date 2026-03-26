@@ -93,6 +93,9 @@ HandlerStatus ClientHandler::handle_output() {
   if (num_sent == -1) {
     return kHandlerClosed;
   }
+  if (num_sent == 0) {
+    return kHandlerContinue;
+  }
 
   update_deadline_();
   bytes_sent_ += num_sent;
